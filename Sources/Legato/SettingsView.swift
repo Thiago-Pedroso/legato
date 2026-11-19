@@ -7,18 +7,69 @@ struct SettingsView: View {
     @ObservedObject var controller: Controller
     @State var tab = 0
 
+    private var sections: [(title: String, icon: String)] {
+        [
+            (L.t("General", "Geral"), "gearshape"),
+            (L.t("Transcription", "Transcrição"), "waveform"),
+            (L.t("Vocabulary", "Vocabulário"), "character.book.closed"),
+            (L.t("History", "Histórico"), "clock"),
+        ]
+    }
+
     var body: some View {
-        TabView(selection: $tab) {
-            GeneralTab(controller: controller)
-                .tabItem { Label(L.t("General", "Geral"), systemImage: "gearshape") }.tag(0)
-            TranscriptionTab(controller: controller)
-                .tabItem { Label(L.t("Transcription", "Transcrição"), systemImage: "waveform") }.tag(1)
-            VocabularyTab(controller: controller)
-                .tabItem { Label(L.t("Vocabulary", "Vocabulário"), systemImage: "character.book.closed") }.tag(2)
-            HistoryTab(controller: controller)
-                .tabItem { Label(L.t("History", "Histórico"), systemImage: "clock") }.tag(3)
+        HStack(spacing: 0) {
+            sidebar
+            Divider()
+            VStack(alignment: .leading, spacing: 0) {
+                Text(sections[tab].title).font(.title2.weight(.semibold))
+                    .padding(.horizontal, 28).padding(.top, 26).padding(.bottom, 2)
+                Group {
+                    switch tab {
+                    case 0: GeneralTab(controller: controller)
+                    case 1: TranscriptionTab(controller: controller)
+                    case 2: VocabularyTab(controller: controller)
+                    default: HistoryTab(controller: controller)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
-        .frame(width: 560, height: 520)
+        .tint(Theme.cobalt)
+        .frame(width: 740, height: 540)
+        .ignoresSafeArea()
+    }
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 7) {
+                SlurMark().fill(Theme.cobaltAdaptive).frame(width: 26, height: 26)
+                Text("legato").font(.system(size: 22, weight: .medium, design: .serif)).italic()
+            }
+            .padding(.leading, 8).padding(.bottom, 18)
+            .accessibilityElement(children: .ignore).accessibilityLabel("Legato")
+            ForEach(sections.indices, id: \.self) { index in
+                Button { tab = index } label: {
+                    HStack(spacing: 9) {
+                        Image(systemName: sections[index].icon).frame(width: 18)
+                            .foregroundStyle(tab == index ? Theme.cobaltAdaptive : Color.secondary)
+                        Text(sections[index].title)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 9).padding(.vertical, 7)
+                    .background(RoundedRectangle(cornerRadius: 7).fill(Color.primary.opacity(tab == index ? 0.09 : 0)))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(tab == index ? .isSelected : [])
+            }
+            Spacer()
+            Text("v" + (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"))
+                .font(.caption).foregroundStyle(.tertiary).padding(.leading, 9)
+        }
+        .padding(.horizontal, 12).padding(.top, 52).padding(.bottom, 16)
+        .frame(width: 190)
+        .frame(maxHeight: .infinity)
+        .background(.regularMaterial)
     }
 }
 
@@ -34,7 +85,24 @@ private struct GeneralTab: View {
 
     var body: some View {
         Form {
-            Section(L.t("Setup", "Configuração")) {
+            Section {
+                Picker(L.t("Dictation key", "Tecla de ditado"), selection: $controller.settings.trigger) {
+                    ForEach(TriggerKey.allCases) { key in Text(key.title).tag(key) }
+                }
+                Text(
+                    L.t(
+                        "Hold to talk and release to finish. Tap twice to keep recording hands-free, then tap once to finish. Esc cancels.",
+                        "Segure para falar e solte para terminar. Toque duas vezes para gravar com as mãos livres e uma vez para terminar. Esc cancela.")
+                )
+                .font(.callout).foregroundStyle(.secondary)
+            }
+            Section {
+                Toggle(L.t("Play a sound when recording starts and stops", "Tocar um som ao começar e terminar"), isOn: $controller.settings.sounds)
+                Toggle(L.t("Add a space after each dictation", "Adicionar um espaço depois de cada ditado"), isOn: $controller.settings.trailingSpace)
+                Toggle(L.t("Open Legato at login", "Abrir o Legato ao iniciar a sessão"), isOn: $loginItem)
+                    .onChange(of: loginItem) { _, value in LoginItem.set(value) }
+            }
+            Section(L.t("Permissions", "Permissões")) {
                 StepRow(
                     done: microphone == .authorized, title: L.t("Microphone", "Microfone"),
                     detail: L.t("To hear what you dictate.", "Para ouvir o que você dita."),
@@ -56,12 +124,12 @@ private struct GeneralTab: View {
                     Permissions.requestAccessibility()
                     Permissions.open(Permissions.accessibilityPane)
                 }
-                StepRow(
-                    done: controller.modelState == .ready || controller.modelState == .resting
-                        || controller.settings.engine == .api,
-                    title: L.t("Speech model", "Modelo de voz"), detail: modelDetail,
-                    button: L.t("Download", "Baixar"), busy: modelBusy
-                ) { controller.loadModel() }
+                if controller.settings.engine == .local, controller.modelState != .ready, controller.modelState != .resting {
+                    StepRow(
+                        done: false, title: L.t("Speech model", "Modelo de voz"), detail: modelDetail,
+                        button: L.t("Download", "Baixar"), busy: modelBusy
+                    ) { controller.loadModel() }
+                }
                 if controller.settings.trigger == .fn, fnAction != 0 {
                     StepRow(
                         done: false, title: L.t("The fn key", "A tecla fn"),
@@ -71,23 +139,6 @@ private struct GeneralTab: View {
                         button: L.t("Open Keyboard", "Abrir Teclado")
                     ) { Permissions.open(Permissions.keyboardPane) }
                 }
-            }
-            Section(L.t("Shortcut", "Atalho")) {
-                Picker(L.t("Dictation key", "Tecla de ditado"), selection: $controller.settings.trigger) {
-                    ForEach(TriggerKey.allCases) { key in Text(key.title).tag(key) }
-                }
-                Text(
-                    L.t(
-                        "Hold to talk and release to finish. Tap twice to keep recording hands-free, then tap once to finish. Esc cancels.",
-                        "Segure para falar e solte para terminar. Toque duas vezes para gravar com as mãos livres e uma vez para terminar. Esc cancela.")
-                )
-                .font(.callout).foregroundStyle(.secondary)
-            }
-            Section {
-                Toggle(L.t("Play a sound when recording starts and stops", "Tocar um som ao começar e terminar"), isOn: $controller.settings.sounds)
-                Toggle(L.t("Add a space after each dictation", "Adicionar um espaço depois de cada ditado"), isOn: $controller.settings.trailingSpace)
-                Toggle(L.t("Open Legato at login", "Abrir o Legato ao iniciar a sessão"), isOn: $loginItem)
-                    .onChange(of: loginItem) { _, value in LoginItem.set(value) }
             }
         }
         .formStyle(.grouped)
@@ -133,7 +184,7 @@ private struct StepRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             Image(systemName: done ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(done ? Theme.cobalt : Color.secondary)
+                .foregroundStyle(done ? Theme.cobaltAdaptive : Color.secondary)
                 .font(.title3)
                 .accessibilityLabel(done ? L.t("Done", "Feito") : L.t("Pending", "Pendente"))
             VStack(alignment: .leading, spacing: 2) {

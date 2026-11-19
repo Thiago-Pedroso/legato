@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Cobalto: ink, paper and one flat blue, after the Blue Note record sleeves.
@@ -6,6 +7,13 @@ enum Theme {
     static let paper = Color(red: 0xF3 / 255, green: 0xF4 / 255, blue: 0xF6 / 255)
     static let cobalt = Color(red: 0x24 / 255, green: 0x47 / 255, blue: 0xE0 / 255)
     static let cobaltSoft = Color(red: 0x7D / 255, green: 0x99 / 255, blue: 0xFF / 255)
+    /// Cobalt on light backgrounds, its softer tone on dark ones, so it stays readable in both.
+    static let cobaltAdaptive = Color(
+        nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                ? NSColor(red: 0x7D / 255, green: 0x99 / 255, blue: 1, alpha: 1)
+                : NSColor(red: 0x24 / 255, green: 0x47 / 255, blue: 0xE0 / 255, alpha: 1)
+        })
     static let pill = Color(red: 0x0B / 255, green: 0x0B / 255, blue: 0x0C / 255)
 }
 

@@ -33,10 +33,11 @@ struct PillView: View {
 
     var body: some View {
         content
-            .padding(.horizontal, 16)
-            .frame(minWidth: 92, minHeight: 34, maxHeight: 34)
-            .background(Capsule().fill(Theme.pill))
-            .overlay(Capsule().strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
+            .padding(.horizontal, 11)
+            .frame(minWidth: 60, minHeight: 24, maxHeight: 24)
+            .background(background)
+            .overlay(Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5))
+            .environment(\.colorScheme, .dark)
             .contentShape(Capsule())
             .onTapGesture { model.onTap?() }
             .opacity(model.mode == .hidden ? 0 : 1)
@@ -45,45 +46,55 @@ struct PillView: View {
             .accessibilityElement(children: .combine)
     }
 
+    /// Dark glass that lets the desktop show through. Still frames use a flat fill, since
+    /// a blur has nothing behind it to blur in a rendered picture.
+    @ViewBuilder private var background: some View {
+        if still {
+            Capsule().fill(Theme.pill)
+        } else {
+            Glass().clipShape(Capsule()).overlay(Capsule().fill(Color.black.opacity(0.28)))
+        }
+    }
+
     @ViewBuilder private var content: some View {
         switch model.mode {
         case .hidden:
-            Color.clear.frame(width: 60)
+            Color.clear.frame(width: 38)
         case .recording(let handsFree):
-            HStack(spacing: 10) {
+            HStack(spacing: 7) {
                 bars
                 if handsFree {
-                    RoundedRectangle(cornerRadius: 2.5).fill(Theme.cobaltSoft).frame(width: 10, height: 10)
+                    RoundedRectangle(cornerRadius: 2).fill(Theme.cobaltSoft).frame(width: 7, height: 7)
                         .accessibilityLabel(L.t("Stop", "Parar"))
                 }
             }
         case .working(let detail):
-            HStack(spacing: 8) {
-                WorkingArc(still: still).frame(width: 40, height: 10)
+            HStack(spacing: 6) {
+                WorkingArc(still: still).frame(width: 28, height: 7)
                 if let detail {
-                    Text(detail).font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.75))
+                    Text(detail).font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.75))
                         .monospacedDigit()
                 }
             }
         case .failed(let message):
-            HStack(spacing: 8) {
-                Text("!").font(.system(size: 11, weight: .bold)).foregroundStyle(Theme.pill)
-                    .frame(width: 16, height: 16).background(Circle().fill(Theme.cobaltSoft))
-                Text(message).font(.system(size: 12, weight: .medium)).foregroundStyle(.white).lineLimit(1)
+            HStack(spacing: 6) {
+                Text("!").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.pill)
+                    .frame(width: 13, height: 13).background(Circle().fill(Theme.cobaltSoft))
+                Text(message).font(.system(size: 11, weight: .medium)).foregroundStyle(.white).lineLimit(1)
             }
         case .notice(let message):
-            Text(message).font(.system(size: 12, weight: .medium)).foregroundStyle(.white).lineLimit(1)
+            Text(message).font(.system(size: 11, weight: .medium)).foregroundStyle(.white).lineLimit(1)
         }
     }
 
     private var bars: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 2) {
             ForEach(0..<PillModel.barCount, id: \.self) { index in
-                Capsule().fill(Theme.cobaltSoft)
-                    .frame(width: 3, height: 4 + 14 * model.levels[index])
+                Capsule().fill(Theme.cobaltSoft.opacity(0.9))
+                    .frame(width: 2, height: 3 + 9 * model.levels[index])
             }
         }
-        .frame(height: 18)
+        .frame(height: 12)
         .animation(.linear(duration: 0.09), value: model.levels)
     }
 }
@@ -96,13 +107,25 @@ private struct WorkingArc: View {
     var body: some View {
         SlurLine()
             .trim(from: still ? 0 : max(0, phase - 1), to: still ? 1 : min(1, phase))
-            .stroke(Theme.cobaltSoft, style: StrokeStyle(lineWidth: 2.4, lineCap: .round))
-            .padding(.top, 3)
+            .stroke(Theme.cobaltSoft.opacity(0.9), style: StrokeStyle(lineWidth: 1.8, lineCap: .round))
+            .padding(.top, 2)
             .onAppear {
                 guard !still else { return }
                 withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: false)) { phase = 2 }
             }
     }
+}
+
+private struct Glass: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .hudWindow
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
 }
 
 /// A borderless panel above the Dock that never takes focus from the app being typed into.
@@ -151,6 +174,6 @@ final class PillPanel {
         let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
         guard let area = screen?.visibleFrame else { return }
         let size = panel.frame.size
-        panel.setFrameOrigin(NSPoint(x: area.midX - size.width / 2, y: area.minY + 12))
+        panel.setFrameOrigin(NSPoint(x: area.midX - size.width / 2, y: area.minY))
     }
 }
