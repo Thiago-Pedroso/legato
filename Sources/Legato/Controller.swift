@@ -14,6 +14,11 @@ enum ModelState: Equatable {
     case failed(String)
 }
 
+enum DictationError: Error {
+    /// A short clip came out in another language. Holds what the model wrote.
+    case unclear(String)
+}
+
 /// Runs a dictation from key press to pasted text, and owns the pieces that takes.
 @MainActor
 final class Controller: ObservableObject {
@@ -261,10 +266,11 @@ final class Controller: ObservableObject {
 
     func retry(_ id: UUID, paste: Bool) {
         guard let data = try? Data(contentsOf: history.audioURL(for: id)), let samples = WAV.decode(data) else { return }
-        transcribe(samples, entry: id, paste: paste)
+        // Asked for by hand, so the text goes through even if it looks like the wrong language.
+        transcribe(samples, entry: id, paste: paste, verify: false)
     }
 
-    private func transcribe(_ samples: [Float], entry id: UUID, paste: Bool) {
+    private func transcribe(_ samples: [Float], entry id: UUID, paste: Bool, verify: Bool = true) {
         guard !inFlight.contains(id) else { return }
         inFlight.insert(id)
         beginWork()
@@ -276,8 +282,17 @@ final class Controller: ObservableObject {
                 switch settings.engine {
                 case .local:
                     if modelState == .resting || modelState == .missing { loadModel() }
-                    text = try await engine.transcribe(samples, model: settings.localModel, language: settings.language)
-                        .corrected(language: settings.language)
+                    let transcript = try await engine.transcribe(
+                        samples, model: settings.localModel, language: settings.language)
+                    text = transcript.corrected(language: settings.language)
+                    let seconds = Double(samples.count) / Double(WAV.sampleRate)
+                    if verify,
+                        LanguageCheck.soundsLikeAnotherLanguage(
+                            text, expected: settings.language, duration: seconds, confidence: transcript.confidence,
+                            vocabulary: settings.vocabulary)
+                    {
+                        throw DictationError.unclear(text)
+                    }
                     if self.settings.localModel == settings.localModel, self.settings.engine == .local {
                         modelState = .ready
                         scheduleUnload()
@@ -311,6 +326,14 @@ final class Controller: ObservableObject {
                     Inserter.copy(final)
                     flash(.notice(L.t("Copied", "Copiado")), seconds: 1.6)
                 }
+            } catch DictationError.unclear(let heard) {
+                endWork()
+                history.update(id) {
+                    $0.status = .failed
+                    $0.error = L.t("Sounded like another language: “\(heard)”", "Pareceu outra língua: “\(heard)”")
+                }
+                entries = history.entries
+                flash(.notice(L.t("Didn't catch that", "Não entendi")), seconds: 1.6)
             } catch {
                 endWork()
                 history.update(id) { $0.status = .failed; $0.error = error.localizedDescription }

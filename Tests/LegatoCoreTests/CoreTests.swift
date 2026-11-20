@@ -115,6 +115,33 @@ import Testing
     }
 }
 
+@Suite struct LanguageCheckTests {
+    func check(_ text: String, seconds: TimeInterval = 1, confidence: Float = 0.8, vocabulary: [String] = []) -> Bool {
+        LanguageCheck.soundsLikeAnotherLanguage(
+            text, expected: "pt", duration: seconds, confidence: confidence, vocabulary: vocabulary)
+    }
+
+    @Test func flagsShortClipsHeardInAnotherLanguage() {
+        #expect(check("says she"))
+        #expect(check("Verlobte sie."))
+        #expect(check("Fold you see here."))
+    }
+
+    @Test func keepsShortPortuguese() {
+        #expect(!check("Teste."))
+        #expect(!check("Sim.", confidence: 0.5))
+        #expect(!check("Uh, dois, três."))
+    }
+
+    @Test func trustsLongOrConfidentOrKnownText() {
+        #expect(!check("says she", seconds: 4))
+        #expect(!check("says she", confidence: 0.95))
+        #expect(!check("GitHub", vocabulary: ["GitHub"]))
+        #expect(!LanguageCheck.soundsLikeAnotherLanguage(
+            "says she", expected: "auto", duration: 1, confidence: 0.5, vocabulary: []))
+    }
+}
+
 @Suite struct StorageTests {
     @Test func wavRoundTrip() {
         let samples: [Float] = [0, 0.5, -0.5, 1, -1]

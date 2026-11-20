@@ -106,6 +106,12 @@ enum CLI {
                 note(
                     "\(String(format: "%.1f", seconds))s of audio in \(String(format: "%.2f", Date().timeIntervalSince(clock)))s, confidence \(String(format: "%.2f", transcript.confidence))")
                 note("heard: \(transcript.text)")
+                if LanguageCheck.soundsLikeAnotherLanguage(
+                    transcript.text, expected: settings.language, duration: seconds, confidence: transcript.confidence,
+                    vocabulary: settings.vocabulary)
+                {
+                    note("held back: sounds like another language")
+                }
                 print(
                     TextProcessor.process(
                         transcript.corrected(language: settings.language), vocabulary: settings.vocabulary,
