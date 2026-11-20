@@ -287,6 +287,31 @@ private struct TranscriptionTab: View {
                         .onChange(of: cleanupKey) { _, value in Keychain.set("cleanup", value) }
                     TextField(L.t("Instructions", "Instruções"), text: $controller.settings.cleanupPrompt, axis: .vertical)
                         .lineLimit(3...6)
+                    Picker(L.t("Use in", "Usar em"), selection: $controller.settings.cleanupEverywhere) {
+                        Text(L.t("Every app", "Todos os aplicativos")).tag(true)
+                        Text(L.t("Only these apps", "Só nestes aplicativos")).tag(false)
+                    }
+                    if !controller.settings.cleanupEverywhere {
+                        ForEach(controller.settings.cleanupApps, id: \.self) { id in
+                            HStack {
+                                AppLabel(bundleID: id)
+                                Spacer()
+                                Button {
+                                    controller.settings.cleanupApps.removeAll { $0 == id }
+                                } label: {
+                                    Image(systemName: "minus.circle")
+                                }
+                                .buttonStyle(.borderless)
+                                .help(L.t("Remove", "Remover"))
+                            }
+                        }
+                        Menu(L.t("Add app", "Adicionar aplicativo")) {
+                            ForEach(runningApps, id: \.self) { id in
+                                Button(AppLabel.name(of: id)) { controller.settings.cleanupApps.append(id) }
+                            }
+                        }
+                        .fixedSize()
+                    }
                 }
                 Text(
                     L.t(
@@ -299,6 +324,15 @@ private struct TranscriptionTab: View {
         .formStyle(.grouped)
     }
 
+    /// Apps open now that are not on the list yet, by name.
+    private var runningApps: [String] {
+        let ids = NSWorkspace.shared.runningApplications
+            .filter { $0.activationPolicy == .regular }
+            .compactMap(\.bundleIdentifier)
+            .filter { $0 != Bundle.main.bundleIdentifier && !controller.settings.cleanupApps.contains($0) }
+        return Array(Set(ids)).sorted { AppLabel.name(of: $0) < AppLabel.name(of: $1) }
+    }
+
     private var status: String {
         switch controller.modelState {
         case .missing: return L.t("Not downloaded", "Não baixado")
@@ -308,6 +342,26 @@ private struct TranscriptionTab: View {
         case .resting: return L.t("Downloaded", "Baixado")
         case .failed(let message): return message
         }
+    }
+}
+
+/// An app's icon and name from its bundle identifier.
+private struct AppLabel: View {
+    let bundleID: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                    .resizable().frame(width: 18, height: 18)
+            }
+            Text(Self.name(of: bundleID))
+        }
+    }
+
+    static func name(of bundleID: String) -> String {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return bundleID }
+        return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
     }
 }
 

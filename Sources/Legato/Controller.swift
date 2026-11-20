@@ -46,6 +46,8 @@ final class Controller: ObservableObject {
     private var workingTicker: Timer?
     private var hideTimer: DispatchWorkItem?
     private var lastFailed: UUID?
+    /// The app in front when the recording started, where the text is headed.
+    private var targetApp: String?
     /// The speakers Legato muted for this recording, to unmute when it ends.
     private var mutedOutput: AudioDeviceID?
 
@@ -228,6 +230,7 @@ final class Controller: ObservableObject {
             // A chosen microphone that is not connected right now falls back to the default.
             let device = settings.microphone.isEmpty ? nil : AudioDevices.input(uid: settings.microphone)
             try recorder.start(device: device)
+            targetApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         } catch {
             machine.reset()
             flash(.failed(error.localizedDescription), seconds: 4)
@@ -273,7 +276,7 @@ final class Controller: ObservableObject {
             flash(.failed(error.localizedDescription), seconds: 4)
             return
         }
-        transcribe(samples, entry: entry.id, paste: true)
+        transcribe(samples, entry: entry.id, paste: true, app: targetApp)
     }
 
     private func muteOutput() {
@@ -295,10 +298,12 @@ final class Controller: ObservableObject {
     func retry(_ id: UUID, paste: Bool) {
         guard let data = try? Data(contentsOf: history.audioURL(for: id)), let samples = WAV.decode(data) else { return }
         // Asked for by hand, so the text goes through even if it looks like the wrong language.
-        transcribe(samples, entry: id, paste: paste, verify: false)
+        transcribe(
+            samples, entry: id, paste: paste, app: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+            verify: false)
     }
 
-    private func transcribe(_ samples: [Float], entry id: UUID, paste: Bool, verify: Bool = true) {
+    private func transcribe(_ samples: [Float], entry id: UUID, paste: Bool, app: String?, verify: Bool = true) {
         guard !inFlight.contains(id) else { return }
         inFlight.insert(id)
         beginWork()
@@ -330,7 +335,7 @@ final class Controller: ObservableObject {
                         samples, baseURL: settings.apiBaseURL, model: settings.apiModel, key: Keychain.get("api"),
                         language: settings.language, vocabulary: settings.vocabulary)
                 }
-                if settings.cleanupEnabled, !settings.cleanupModel.isEmpty, !text.isEmpty {
+                if settings.cleansUp(in: app), !text.isEmpty {
                     // Cleanup is a nicety: if it fails or stalls, the plain transcript goes through.
                     text = (try? await APIEngine.cleanUp(
                         text, baseURL: settings.cleanupBaseURL, model: settings.cleanupModel,

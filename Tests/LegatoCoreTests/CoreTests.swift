@@ -168,6 +168,20 @@ import Testing
         #expect(!reopened.hasAudio(first.id))
     }
 
+    @Test func cleanupCanBeLimitedToSomeApps() {
+        var settings = Settings()
+        settings.cleanupEnabled = true
+        settings.cleanupModel = "llama"
+        #expect(settings.cleansUp(in: "com.apple.Notes"))
+        settings.cleanupEverywhere = false
+        settings.cleanupApps = ["com.mitchellh.ghostty"]
+        #expect(settings.cleansUp(in: "com.mitchellh.ghostty"))
+        #expect(!settings.cleansUp(in: "com.apple.Notes"))
+        #expect(!settings.cleansUp(in: nil))
+        settings.cleanupModel = ""
+        #expect(!settings.cleansUp(in: "com.mitchellh.ghostty"))
+    }
+
     @Test func settingsSurviveMissingKeys() throws {
         let old = #"{"trigger":"rightOption","vocabulary":["Pensy"]}"#
         let settings = try JSONDecoder().decode(Settings.self, from: Data(old.utf8))

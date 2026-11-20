@@ -66,7 +66,7 @@ In a test with a synthetic Portuguese voice reading 20 sentences at two speeds, 
 
 **Suggestions from your projects.** Typing a vocabulary by hand is a chore nobody does. If you use Claude Code, run `make claude-command` once and then `/legato-vocabulary ~/Projects/my-project` in any session. It reads the prose in those folders (READMEs, notes, commit messages), picks out the names and jargon, and then tests each one: your Mac speaks the term with a synthetic voice and the speech model transcribes it. Terms the model already gets right are dropped. The rest wait in the Vocabulary tab, each showing how it was misheard, until you accept or dismiss them. Nothing is added on its own. The same steps work from a terminal with `Legato vocab candidates`, `probe` and `suggest`.
 
-**Cleanup.** An optional pass through a chat model that removes filler words and fixes punctuation. It is off by default because it sends the text to the service you pick and adds a short wait.
+**Cleanup.** An optional pass through a chat model that removes filler words and fixes punctuation. It is off by default because it sends the text to the service you pick and adds a short wait. You can keep it to the apps where it pays off, say the terminal where you talk to a coding agent, and leave your messages as you said them.
 
 **History.** Every dictation with its audio. Copy it, listen to it, transcribe it again or delete it. Recordings live in `~/Library/Application Support/Legato`.
 
@@ -93,7 +93,7 @@ With the local model, audio and text stay on your Mac. Legato has no analytics a
 
 ## What is not there yet
 
-Legato is young. Very short utterances are its weak spot: a lone word like "teste" gives the model too little to tell which language it is hearing, and it sometimes answers in the wrong one. When a clip under two seconds comes back unsure and in another language, Legato does not type it; the pill says it didn't catch that, and the History tab keeps what the model wrote. Whisper large-v3 turbo and Canary 1B, both forced to Portuguese, did no better on the same clips, so a second model is not the answer. Full sentences do not have this problem.  The scan tests terms with synthetic voices, which do not pronounce things the way you do. There is no notarized download, so for now you build it from source. Rules per app, editing selected text by voice, and learning new words from your corrections are on the list.
+Legato is young. Very short utterances are its weak spot: a lone word like "teste" gives the model too little to tell which language it is hearing, and it sometimes answers in the wrong one. When a clip under two seconds comes back unsure and in another language, Legato does not type it; the pill says it didn't catch that, and the History tab keeps what the model wrote. Whisper large-v3 turbo and Canary 1B, both forced to Portuguese, did no better on the same clips, so a second model is not the answer. Full sentences do not have this problem.  The scan tests terms with synthetic voices, which do not pronounce things the way you do. There is no notarized download, so for now you build it from source. Editing selected text by voice, and learning new words from your corrections are on the list.
 
 ## Development
 

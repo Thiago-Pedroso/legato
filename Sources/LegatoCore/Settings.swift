@@ -38,6 +38,9 @@ public struct Settings: Codable, Equatable {
     public var cleanupBaseURL: String = "https://api.groq.com/openai/v1"
     public var cleanupModel: String = ""
     public var cleanupPrompt: String = Settings.defaultCleanupPrompt
+    /// When false, cleanup runs only for dictations into the apps in `cleanupApps` (bundle identifiers).
+    public var cleanupEverywhere: Bool = true
+    public var cleanupApps: [String] = []
     public var onboarded: Bool = false
 
     public static let defaultCleanupPrompt = """
@@ -47,6 +50,12 @@ public struct Settings: Codable, Equatable {
         """
 
     public init() {}
+
+    /// Whether a dictation going into `app` should pass through the cleanup model.
+    public func cleansUp(in app: String?) -> Bool {
+        guard cleanupEnabled, !cleanupModel.isEmpty else { return false }
+        return cleanupEverywhere || app.map(cleanupApps.contains) == true
+    }
 
     // Decoded field by field so a settings file from an older version keeps what it has
     // and picks up defaults for anything new.
@@ -74,6 +83,8 @@ public struct Settings: Codable, Equatable {
         cleanupBaseURL = value(.cleanupBaseURL, d.cleanupBaseURL)
         cleanupModel = value(.cleanupModel, d.cleanupModel)
         cleanupPrompt = value(.cleanupPrompt, d.cleanupPrompt)
+        cleanupEverywhere = value(.cleanupEverywhere, d.cleanupEverywhere)
+        cleanupApps = value(.cleanupApps, d.cleanupApps)
         onboarded = value(.onboarded, d.onboarded)
     }
 }
