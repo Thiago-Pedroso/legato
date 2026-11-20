@@ -27,6 +27,10 @@ public struct Settings: Codable, Equatable {
     public var replacements: [Replacement] = []
     public var trailingSpace: Bool = true
     public var sounds: Bool = true
+    /// Core Audio UID of the microphone to use. Empty follows the system's default input.
+    public var microphone: String = ""
+    /// Silences the speakers while recording, so music or a video does not end up in the dictation.
+    public var muteWhileRecording: Bool = false
     /// Minutes without dictating before the local model leaves memory. 0 keeps it loaded.
     public var unloadAfterMinutes: Int = 15
     public var historyLimit: Int = 100
@@ -62,6 +66,8 @@ public struct Settings: Codable, Equatable {
         replacements = value(.replacements, d.replacements)
         trailingSpace = value(.trailingSpace, d.trailingSpace)
         sounds = value(.sounds, d.sounds)
+        microphone = value(.microphone, d.microphone)
+        muteWhileRecording = value(.muteWhileRecording, d.muteWhileRecording)
         unloadAfterMinutes = value(.unloadAfterMinutes, d.unloadAfterMinutes)
         historyLimit = value(.historyLimit, d.historyLimit)
         cleanupEnabled = value(.cleanupEnabled, d.cleanupEnabled)

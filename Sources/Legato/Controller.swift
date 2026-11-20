@@ -1,6 +1,7 @@
 import AVFoundation
 import AppKit
 import Combine
+import CoreAudio
 import LegatoCore
 
 /// Where the local model stands, for the menu and the settings window.
@@ -45,6 +46,8 @@ final class Controller: ObservableObject {
     private var workingTicker: Timer?
     private var hideTimer: DispatchWorkItem?
     private var lastFailed: UUID?
+    /// The speakers Legato muted for this recording, to unmute when it ends.
+    private var mutedOutput: AudioDeviceID?
 
     init() {
         history = HistoryStore(directory: AppPaths.support)
@@ -222,7 +225,9 @@ final class Controller: ObservableObject {
         }
         do {
             pill.model.resetLevels()
-            try recorder.start()
+            // A chosen microphone that is not connected right now falls back to the default.
+            let device = settings.microphone.isEmpty ? nil : AudioDevices.input(uid: settings.microphone)
+            try recorder.start(device: device)
         } catch {
             machine.reset()
             flash(.failed(error.localizedDescription), seconds: 4)
@@ -231,6 +236,13 @@ final class Controller: ObservableObject {
         hideTimer?.cancel()
         flashing = false
         if settings.sounds { Self.play("Tink") }
+        if settings.muteWhileRecording {
+            // After the start sound, which muting right away would cut off.
+            DispatchQueue.main.asyncAfter(deadline: .now() + (settings.sounds ? 0.25 : 0)) { [weak self] in
+                guard let self, self.recorder.isRecording else { return }
+                self.muteOutput()
+            }
+        }
         pill.show(.recording(handsFree: false))
         // Start loading while the user is still talking, so the wait overlaps the speech.
         if modelState == .resting { loadModel() }
@@ -239,12 +251,14 @@ final class Controller: ObservableObject {
     private func cancelRecording() {
         guard recorder.isRecording else { return }
         _ = recorder.stop()
+        restoreOutput()
         refreshPill()
     }
 
     private func finishRecording() {
         guard recorder.isRecording else { return }
         let samples = recorder.stop()
+        restoreOutput()
         if settings.sounds { Self.play("Pop") }
         guard samples.count > WAV.sampleRate / 4 else {
             refreshPill()
@@ -260,6 +274,20 @@ final class Controller: ObservableObject {
             return
         }
         transcribe(samples, entry: entry.id, paste: true)
+    }
+
+    private func muteOutput() {
+        guard mutedOutput == nil, let output = AudioDevices.defaultOutput, AudioDevices.isMuted(output) == false
+        else { return }
+        AudioDevices.setMuted(output, true)
+        mutedOutput = output
+    }
+
+    /// Unmutes only what Legato muted, so speakers the user silenced stay silent.
+    func restoreOutput() {
+        guard let output = mutedOutput else { return }
+        AudioDevices.setMuted(output, false)
+        mutedOutput = nil
     }
 
     // MARK: Transcription

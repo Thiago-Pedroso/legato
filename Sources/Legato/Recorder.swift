@@ -1,4 +1,5 @@
 import AVFoundation
+import AudioToolbox
 import FluidAudio
 import LegatoCore
 
@@ -15,10 +16,16 @@ final class Recorder {
 
     var isRecording: Bool { engine != nil }
 
-    func start() throws {
+    /// Records from `device`, or from the system's default input when it is nil.
+    func start(device: AudioDeviceID? = nil) throws {
         // A fresh engine each time picks up whatever microphone is current (AirPods, external).
         let engine = AVAudioEngine()
         let input = engine.inputNode
+        if var device, let unit = input.audioUnit {
+            AudioUnitSetProperty(
+                unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &device,
+                UInt32(MemoryLayout<AudioDeviceID>.size))
+        }
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else {
             throw NSError(

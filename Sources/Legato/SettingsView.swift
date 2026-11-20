@@ -81,6 +81,7 @@ private struct GeneralTab: View {
     @State private var accessibility = Permissions.accessibility
     @State private var fnAction = Permissions.fnKeyAction
     @State private var loginItem = LoginItem.isEnabled
+    @State private var inputs = AudioDevices.inputs()
     private let refresh = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -95,6 +96,20 @@ private struct GeneralTab: View {
                         "Segure para falar e solte para terminar. Toque duas vezes para gravar com as mãos livres e uma vez para terminar. Esc cancela.")
                 )
                 .font(.callout).foregroundStyle(.secondary)
+            }
+            Section {
+                Picker(L.t("Microphone", "Microfone"), selection: $controller.settings.microphone) {
+                    Text(L.t("System default", "Padrão do sistema")).tag("")
+                    ForEach(inputs) { device in Text(device.name).tag(device.uid) }
+                    if !controller.settings.microphone.isEmpty,
+                        !inputs.contains(where: { $0.uid == controller.settings.microphone })
+                    {
+                        Text(L.t("Not connected", "Desconectado")).tag(controller.settings.microphone)
+                    }
+                }
+                Toggle(
+                    L.t("Mute the speakers while recording", "Silenciar o som do Mac enquanto grava"),
+                    isOn: $controller.settings.muteWhileRecording)
             }
             Section {
                 Toggle(L.t("Play a sound when recording starts and stops", "Tocar um som ao começar e terminar"), isOn: $controller.settings.sounds)
@@ -146,6 +161,8 @@ private struct GeneralTab: View {
             microphone = Permissions.microphone
             accessibility = Permissions.accessibility
             fnAction = Permissions.fnKeyAction
+            let current = AudioDevices.inputs()
+            if current != inputs { inputs = current }
         }
     }
 

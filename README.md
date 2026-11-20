@@ -56,6 +56,8 @@ Your audio is saved to disk before transcription starts. If anything goes wrong,
 
 **Dictation key.** `fn`, or the right Option, Command or Control key if your keyboard has no `fn`.
 
+**Microphone.** The system default, or a specific one, so AirPods connecting in the middle of a call do not change where Legato listens. Legato can also mute the Mac's speakers while it records, so the song playing does not end up in your dictation; it unmutes them when you finish, and leaves alone speakers you had muted yourself.
+
 **Where transcription runs.** On this Mac, with Parakeet Ultra (the default) or the smaller Parakeet v3. Or through any service that speaks the OpenAI transcription API, such as Groq, OpenAI or a server of your own. With an API your audio is sent to that service; the key is stored in your keychain.
 
 **Vocabulary.** Names and terms you want spelled your way, like `Claude Code` or the name of your company. With the local model, a second, smaller model (100 MB, downloaded the first time you add a term) listens to each dictation again for those terms. It only overrules the transcript where it heard something that is not an ordinary word, so "pensou" stays "pensou" even with `Pensy` on the list. Spelling that comes close to a term is corrected too. There are also literal replacements: say "my email", get your address.

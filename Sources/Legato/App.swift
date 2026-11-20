@@ -26,6 +26,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        controller.restoreOutput()
+    }
+
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         openSettings()
         return true
