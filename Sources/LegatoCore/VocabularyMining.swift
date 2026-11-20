@@ -81,44 +81,43 @@ public enum VocabularyMiner {
     }
 
     static func terms(in line: String) -> [String] {
-        let words = line.split(whereSeparator: { !($0.isLetter || $0.isNumber || $0 == "-" || $0 == "'") })
-            .map { String($0).trimmingCharacters(in: CharacterSet(charactersIn: "-'")) }.filter { !$0.isEmpty }
-        // A word is at a sentence start when it opens the line or follows closing punctuation.
-        var starts = Set<Int>()
-        var index = 0
-        var atStart = true
-        for piece in line.split(separator: " ", omittingEmptySubsequences: true) {
-            let cleaned = piece.trimmingCharacters(in: CharacterSet.letters.union(.decimalDigits).inverted)
-            guard !cleaned.isEmpty, index < words.count else {
-                if piece.allSatisfy({ "#>*-|:".contains($0) || $0.isNumber || $0 == "." }) { atStart = true }
-                continue
-            }
-            if atStart { starts.insert(index) }
-            atStart = piece.last.map { ".!?:|".contains($0) } ?? false
-            index += cleaned.split(whereSeparator: { !($0.isLetter || $0.isNumber || $0 == "-" || $0 == "'") }).count
-        }
-
         var found: [String] = []
         var run: [String] = []
         func flushRun() {
             if run.count >= 2 { found.append(run.joined(separator: " ")) }
             run = []
         }
-        for (position, word) in words.enumerated() {
-            guard word.count >= 2, word.first!.isLetter else { flushRun(); continue }
+        let edges = CharacterSet.letters.union(.decimalDigits).inverted
+        // A word opens a sentence when it starts the line or follows closing punctuation.
+        var atStart = true
+        for piece in line.split(separator: " ", omittingEmptySubsequences: true) {
+            let word = piece.trimmingCharacters(in: edges)
+            let endsClause = piece.last.map { ",.;:!?)|".contains($0) } ?? false
+            let endsSentence = piece.last.map { ".!?:|".contains($0) } ?? false
+            guard word.count >= 2, word.first!.isLetter,
+                word.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "'" })
+            else {
+                flushRun()
+                // List bullets, heading marks and table bars start a sentence; a stray word does not.
+                atStart = word.isEmpty ? true : endsSentence
+                continue
+            }
             let capitalized = word.first!.isUppercase
             let letters = word.filter(\.isLetter)
             let acronym = letters.count >= 2 && letters.count <= 6 && letters.allSatisfy(\.isUppercase)
             let humps = zip(word, word.dropFirst()).contains { $0.isLowercase && $1.isUppercase }
-                || (letters.count > 6 && letters.allSatisfy(\.isUppercase) == false
-                    && zip(word, word.dropFirst()).contains { $0.isUppercase && $1.isUppercase } && word.contains(where: \.isLowercase))
+                || (letters.count > 6 && word.contains(where: \.isLowercase)
+                    && zip(word, word.dropFirst()).contains { $0.isUppercase && $1.isUppercase })
             if acronym || humps {
                 found.append(word)
-            } else if capitalized, word.count >= 3, !starts.contains(position) {
+            } else if capitalized, word.count >= 3, !atStart {
                 found.append(word)
             }
             // Runs of capitalized words are product and people names: "Claude Code".
-            if capitalized, !(starts.contains(position) && run.isEmpty) { run.append(word) } else { flushRun() }
+            if capitalized, !(atStart && run.isEmpty) { run.append(word) } else { flushRun() }
+            // A comma or full stop ends the name: "Groq, OpenAI" is two names, not one.
+            if endsClause { flushRun() }
+            atStart = endsSentence
         }
         flushRun()
         return found

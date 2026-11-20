@@ -336,7 +336,7 @@ private struct VocabularyTab: View {
                             controller.accept(chosen)
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(controller.suggestions.count == skipped.count)
+                        .disabled(Set(controller.suggestions.map(\.id)).isSubset(of: skipped))
                     }
                 } footer: {
                     Text(
@@ -444,7 +444,9 @@ private struct HistoryTab: View {
                 List(controller.entries) { entry in
                     HStack(alignment: .top, spacing: 10) {
                         VStack(alignment: .leading, spacing: 3) {
-                            if entry.status == .failed {
+                            if controller.inFlight.contains(entry.id) {
+                                Text(L.t("Transcribing…", "Transcrevendo…")).foregroundStyle(.secondary)
+                            } else if entry.status == .failed {
                                 Label(entry.error ?? L.t("Failed", "Falhou"), systemImage: "exclamationmark.triangle")
                                     .foregroundStyle(.orange)
                             } else {
@@ -457,7 +459,7 @@ private struct HistoryTab: View {
                         if entry.status == .done {
                             icon("doc.on.doc", L.t("Copy", "Copiar")) { Inserter.copy(entry.text) }
                         }
-                        if let url = controller.audioURL(entry.id) {
+                        if let url = controller.audioURL(entry.id), !controller.inFlight.contains(entry.id) {
                             icon("play", L.t("Play", "Ouvir")) {
                                 player = try? AVAudioPlayer(contentsOf: url)
                                 player?.play()

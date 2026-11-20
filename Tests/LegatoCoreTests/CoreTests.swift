@@ -165,3 +165,12 @@ import Testing
         #expect(merged.map(\.term) == ["Pensy", "Vertyx"])
     }
 }
+
+@Suite struct MiningPunctuationTests {
+    @Test func namesInAListStaySeparate() {
+        let terms = VocabularyMiner.candidates(in: "Falei que uso Groq, OpenAI e o Claude. Code não entra.").map(\.term)
+        #expect(terms.contains("OpenAI"))
+        #expect(!terms.contains("Groq OpenAI"))
+        #expect(!terms.contains("Claude Code"))
+    }
+}

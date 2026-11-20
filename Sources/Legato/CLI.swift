@@ -45,6 +45,23 @@ enum CLI {
             _ = NSApplication.shared
             try? MainActor.assumeIsolated { try Assets.snapshotSettings(to: URL(fileURLWithPath: folder)) }
             return 0
+        case "--debug-pill":
+            // Shows each pill state for a moment and prints the window frame it ends up with.
+            _ = NSApplication.shared
+            MainActor.assumeIsolated {
+                let pill = PillPanel()
+                let modes: [PillModel.Mode] = [
+                    .recording(handsFree: false), .recording(handsFree: true), .working(nil),
+                    .working("Carregando modelo"), .failed("Falhou. Clique para tentar de novo"), .notice("Copiado"),
+                    .working(nil), .hidden,
+                ]
+                for mode in modes {
+                    pill.show(mode)
+                    RunLoop.main.run(until: Date().addingTimeInterval(0.6))
+                    print("\(mode)  ->  \(pill.frame)")
+                }
+            }
+            return 0
         case "vocab":
             return Vocab.run(rest)
         default:
@@ -81,9 +98,10 @@ enum CLI {
             for path in paths {
                 let samples = try AudioConverter().resampleAudioFile(path: path)
                 clock = Date()
-                let text = try await engine.transcribe(samples, model: model, language: "pt")
+                let (text, confidence) = try await engine.transcribeDetailed(samples, model: model, language: "pt")
                 let seconds = Double(samples.count) / Double(WAV.sampleRate)
-                note("\(String(format: "%.1f", seconds))s of audio in \(String(format: "%.2f", Date().timeIntervalSince(clock)))s")
+                note(
+                    "\(String(format: "%.1f", seconds))s of audio in \(String(format: "%.2f", Date().timeIntervalSince(clock)))s, confidence \(String(format: "%.2f", confidence))")
                 print(text)
             }
         }

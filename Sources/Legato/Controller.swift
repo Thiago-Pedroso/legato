@@ -29,7 +29,10 @@ final class Controller: ObservableObject {
     private let recorder = Recorder()
     private let engine = ParakeetEngine()
     private let hotkey = HotkeyMonitor()
-    private var machine = HotkeyStateMachine()
+    private var machine = HotkeyStateMachine() { didSet { hotkey.capturing = machine.isRecording } }
+    /// Dictations being transcribed right now. Their history entries are not failures yet.
+    @Published private(set) var inFlight: Set<UUID> = []
+    private var flashing = false
     private var pendingTap: DispatchWorkItem?
     private var unloadTimer: Timer?
     private var working = 0
@@ -58,15 +61,22 @@ final class Controller: ObservableObject {
         recorder.onLevel = { [weak self] level in self?.pill.model.push(level: level) }
         pill.model.onTap = { [weak self] in self?.pillTapped() }
         hotkey.trigger = settings.trigger
-        hotkey.onTrigger = { [weak self] down in self?.trigger(down) }
-        hotkey.onOtherKey = { [weak self] in
+        hotkey.onTrigger = { [weak self] down, time in self?.trigger(down, at: time) }
+        hotkey.onOtherKey = { [weak self] time in
             guard let self else { return }
-            self.perform(self.machine.otherKeyDown(at: Self.now))
+            self.perform(self.machine.otherKeyDown(at: time))
         }
         hotkey.onEscape = { [weak self] in
-            guard let self, let action = self.machine.escape() else { return false }
-            self.perform(action)
-            return true
+            guard let self else { return }
+            self.perform(self.machine.escape())
+        }
+        Task { [weak self, engine] in
+            await engine.onProgress { fraction in
+                Task { @MainActor in
+                    guard let self, case .downloading = self.modelState else { return }
+                    self.modelState = fraction >= 1 ? .loading : .downloading(fraction)
+                }
+            }
         }
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
@@ -102,6 +112,7 @@ final class Controller: ObservableObject {
             if settings.engine == .local { warmUp() } else { Task { await engine.unload() } }
         }
         if old.historyLimit != settings.historyLimit { prune() }
+        if old.unloadAfterMinutes != settings.unloadAfterMinutes, modelState == .ready { scheduleUnload() }
     }
 
     // MARK: Model lifecycle
@@ -123,16 +134,12 @@ final class Controller: ObservableObject {
         modelState = model.isDownloaded ? .loading : .downloading(0)
         Task {
             do {
-                try await engine.load(model) { [weak self] fraction in
-                    Task { @MainActor in
-                        guard let self, case .downloading = self.modelState else { return }
-                        self.modelState = fraction >= 1 ? .loading : .downloading(fraction)
-                    }
-                }
+                try await engine.load(model)
                 guard settings.localModel == model else { return }
                 modelState = .ready
                 scheduleUnload()
             } catch {
+                guard settings.localModel == model else { return }
                 modelState = .failed(error.localizedDescription)
             }
         }
@@ -153,8 +160,8 @@ final class Controller: ObservableObject {
 
     // MARK: Key handling
 
-    private func trigger(_ down: Bool) {
-        let action = down ? machine.triggerDown(at: Self.now) : machine.triggerUp(at: Self.now)
+    private func trigger(_ down: Bool, at time: TimeInterval) {
+        let action = down ? machine.triggerDown(at: time) : machine.triggerUp(at: time)
         perform(action)
         pendingTap?.cancel()
         if let deadline = machine.pendingDeadline {
@@ -184,6 +191,8 @@ final class Controller: ObservableObject {
             machine.reset()
             finishRecording()
         case .failed:
+            hideTimer?.cancel()
+            flashing = false
             if let id = lastFailed { retry(id, paste: true) }
         default: break
         }
@@ -210,6 +219,7 @@ final class Controller: ObservableObject {
             return
         }
         hideTimer?.cancel()
+        flashing = false
         if settings.sounds { Self.play("Tink") }
         pill.show(.recording(handsFree: false))
         // Start loading while the user is still talking, so the wait overlaps the speech.
@@ -250,17 +260,22 @@ final class Controller: ObservableObject {
     }
 
     private func transcribe(_ samples: [Float], entry id: UUID, paste: Bool) {
+        guard !inFlight.contains(id) else { return }
+        inFlight.insert(id)
         beginWork()
         let settings = self.settings
         Task {
+            defer { inFlight.remove(id) }
             do {
                 var text: String
                 switch settings.engine {
                 case .local:
                     if modelState == .resting || modelState == .missing { loadModel() }
                     text = try await engine.transcribe(samples, model: settings.localModel, language: settings.language)
-                    if modelState != .ready { modelState = .ready }
-                    scheduleUnload()
+                    if self.settings.localModel == settings.localModel, self.settings.engine == .local {
+                        modelState = .ready
+                        scheduleUnload()
+                    }
                 case .api:
                     text = try await APIEngine.transcribe(
                         samples, baseURL: settings.apiBaseURL, model: settings.apiModel, key: Keychain.get("api"),
@@ -366,12 +381,16 @@ final class Controller: ObservableObject {
 
     /// Shows what is true right now: recording wins over working, working over nothing.
     private func refreshPill() {
-        if recorder.isRecording { return }
+        if recorder.isRecording {
+            pill.show(.recording(handsFree: machine.state == .locked))
+            return
+        }
+        // A notice or a failure stays up for its time; the ticker must not wipe it.
+        if flashing { return }
         guard working > 0 else {
             pill.show(.hidden)
             return
         }
-        hideTimer?.cancel()
         let elapsed = Int(Date().timeIntervalSince(workingSince))
         var detail: String?
         switch modelState {
@@ -383,9 +402,16 @@ final class Controller: ObservableObject {
     }
 
     private func flash(_ mode: PillModel.Mode, seconds: Double) {
+        // Never cover a recording in progress: its bars and stop button matter more.
+        // A failure is still reachable from the menu and the History tab.
+        guard !recorder.isRecording else { return }
         hideTimer?.cancel()
+        flashing = true
         pill.show(mode)
-        let work = DispatchWorkItem { [weak self] in self?.refreshPill() }
+        let work = DispatchWorkItem { [weak self] in
+            self?.flashing = false
+            self?.refreshPill()
+        }
         hideTimer = work
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
     }

@@ -48,16 +48,18 @@ actor ParakeetEngine {
     private var manager: AsrManager?
     private var loaded: LocalModel?
     private var loading: (model: LocalModel, task: Task<AsrManager, Error>)?
+    private var progress: @Sendable (Double) -> Void = { _ in }
 
-    var loadedModel: LocalModel? { loaded }
+    /// Download progress goes here no matter which caller started the load.
+    func onProgress(_ handler: @escaping @Sendable (Double) -> Void) { progress = handler }
 
     /// Downloads if needed, loads, and runs one silent clip so the first real dictation is fast.
-    func load(_ model: LocalModel, progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
-        if loaded == model, manager != nil { return }
-        if let loading, loading.model == model {
-            _ = try await loading.task.value
-            return
-        }
+    /// Returns the ready model, so a caller never has to guess whether loading has finished.
+    @discardableResult
+    func load(_ model: LocalModel) async throws -> AsrManager {
+        if loaded == model, let manager { return manager }
+        if let loading, loading.model == model { return try await loading.task.value }
+        let progress = self.progress
         let task = Task { () -> AsrManager in
             let models = try await AsrModels.downloadAndLoad(version: model.version) { update in
                 progress(update.fractionCompleted)
@@ -69,28 +71,42 @@ actor ParakeetEngine {
             return manager
         }
         loading = (model, task)
-        defer { loading = nil }
-        let ready = try await task.value
-        await manager?.cleanup()
+        let ready: AsrManager
+        do {
+            ready = try await task.value
+        } catch {
+            if loading?.task == task { loading = nil }
+            throw error
+        }
+        if loading?.task == task { loading = nil }
+        // Detach the old model before cleaning it, so nothing picks it up half torn down.
+        let old = manager
         manager = ready
         loaded = model
+        if old !== ready { await old?.cleanup() }
+        return ready
     }
 
     func unload() async {
-        await manager?.cleanup()
+        let old = manager
         manager = nil
         loaded = nil
+        await old?.cleanup()
     }
 
     func transcribe(_ samples: [Float], model: LocalModel, language: String) async throws -> String {
-        try await load(model)
-        guard let manager else { return "" }
+        try await transcribeDetailed(samples, model: model, language: language).text
+    }
+
+    /// The transcript with the model's own confidence in it, from 0 to 1.
+    func transcribeDetailed(_ samples: [Float], model: LocalModel, language: String) async throws -> (text: String, confidence: Float) {
+        let manager = try await load(model)
         // The model rejects clips under a second; pad instead of failing on a short word.
         var audio = samples
         if audio.count < WAV.sampleRate { audio += [Float](repeating: 0, count: WAV.sampleRate - audio.count) }
         var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
         let result = try await manager.transcribe(audio, decoderState: &state, language: Language(rawValue: language))
-        return result.text
+        return (result.text, result.confidence)
     }
 }
 
@@ -147,12 +163,14 @@ enum APIEngine {
 
     private static func send(_ request: URLRequest, body: Data) async throws -> [String: Any] {
         let (data, response) = try await URLSession.shared.upload(for: request, from: body)
-        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
+        let parsed = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
-            let detail = ((json["error"] as? [String: Any])?["message"] as? String) ?? "HTTP \(status)"
+            let detail = ((parsed?["error"] as? [String: Any])?["message"] as? String) ?? "HTTP \(status)"
             throw EngineError.api(detail)
         }
-        return json
+        // An answer that is not the expected JSON is a failure to retry, not silence.
+        guard let parsed else { throw EngineError.api(L.t("Unexpected answer from the API", "Resposta inesperada da API")) }
+        return parsed
     }
 }

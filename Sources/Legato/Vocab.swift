@@ -96,10 +96,14 @@ enum Vocab {
             for term in terms {
                 var heard: [HeardForm] = []
                 var ok = true
+                var tested = 0
                 for carrier in voices {
                     let file = folder.appendingPathComponent("clip.aiff")
+                    // Start clean so a failed synthesis can never reuse the previous term's audio.
+                    try? FileManager.default.removeItem(at: file)
                     _ = shell("/usr/bin/say", ["-v", carrier.voice, "-o", file.path, "\(carrier.prefix) \(term) \(carrier.suffix)."])
                     guard let samples = try? AudioConverter().resampleAudioFile(path: file.path) else { continue }
+                    tested += 1
                     let text = try await engine.transcribe(samples, model: model, language: "pt")
                     let middle = Probe.middle(of: text, prefix: carrier.prefix, suffix: carrier.suffix)
                     if TextProcessor.normalize(middle) == TextProcessor.normalize(term) { continue }
@@ -111,6 +115,10 @@ enum Vocab {
                     else { continue }
                     let common = middle.split(separator: " ").allSatisfy { isInDictionary($0.lowercased()) }
                     heard.append(HeardForm(text: middle.lowercased(), common: common))
+                }
+                guard tested > 0 else {
+                    CLI.note("skipped \(term)  (could not synthesize it)")
+                    continue
                 }
                 results.append(ProbeResult(term: term, ok: ok, heard: heard))
                 CLI.note("\(ok ? "ok    " : "missed") \(term)\(heard.isEmpty ? "" : "  <-  " + heard.map(\.text).joined(separator: " | "))")

@@ -73,15 +73,26 @@ enum LoginItem {
 /// Puts text where the cursor is: the text goes on the clipboard, Cmd+V is pressed,
 /// and whatever was on the clipboard before comes back.
 enum Inserter {
+    private typealias Snapshot = [[(NSPasteboard.PasteboardType, Data)]]
+    /// What was on the clipboard before Legato borrowed it, until it has been put back.
+    private static var original: Snapshot?
+
     /// Returns false when the text could only be copied (no Accessibility permission).
     static func insert(_ text: String) -> Bool {
         let board = NSPasteboard.general
-        let saved: [[(NSPasteboard.PasteboardType, Data)]] = (board.pasteboardItems ?? []).map { item in
-            item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }
+        guard Permissions.accessibility else {
+            copy(text)
+            return false
+        }
+        // If an earlier paste has not been restored yet, the board holds that dictation,
+        // not the user's content: keep the snapshot already taken.
+        if original == nil {
+            original = (board.pasteboardItems ?? []).map { item in
+                item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }
+            }
         }
         board.clearContents()
         board.setString(text, forType: .string)
-        guard Permissions.accessibility else { return false }
         // Clipboard managers skip entries marked transient.
         board.setData(Data(), forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
         let stamp = board.changeCount
@@ -91,11 +102,18 @@ enum Inserter {
         for down in [true, false] {
             let event = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: down)
             event?.flags = .maskCommand
+            event?.setIntegerValueField(.eventSourceUserData, value: HotkeyMonitor.syntheticTag)
             event?.post(tap: .cghidEventTap)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-            // If the user copied something in the meantime, leave it alone.
-            guard board.changeCount == stamp, !saved.isEmpty else { return }
+            // A newer paste owns the restore now; or the user copied something, which stays.
+            guard board.changeCount == stamp else {
+                if !isLegatoEntry(board) { original = nil }
+                return
+            }
+            let saved = original ?? []
+            original = nil
+            guard !saved.isEmpty else { return }
             board.clearContents()
             board.writeObjects(
                 saved.map { entries in
@@ -105,6 +123,10 @@ enum Inserter {
                 })
         }
         return true
+    }
+
+    private static func isLegatoEntry(_ board: NSPasteboard) -> Bool {
+        board.types?.contains(NSPasteboard.PasteboardType("org.nspasteboard.TransientType")) ?? false
     }
 
     static func copy(_ text: String) {

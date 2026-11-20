@@ -50,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             parent.submenu = submenu
             menu.addItem(parent)
         }
-        if let failed = controller.entries.first, failed.status == .failed {
+        if let failed = controller.entries.first, failed.status == .failed, !controller.inFlight.contains(failed.id) {
             menu.addItem(item(L.t("Retry Failed Dictation", "Tentar de novo o ditado que falhou")) { [controller] in
                 controller.retry(failed.id, paste: false)
             })

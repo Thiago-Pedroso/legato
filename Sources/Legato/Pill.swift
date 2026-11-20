@@ -128,14 +128,24 @@ private struct Glass: NSViewRepresentable {
     func updateNSView(_ view: NSVisualEffectView, context: Context) {}
 }
 
+/// Lets a click act on the pill even though its panel never becomes the active window.
+private final class PillHost: NSHostingView<AnyView> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 /// A borderless panel above the Dock that never takes focus from the app being typed into.
+/// It is kept just big enough for the pill, so it never sits on top of anything else.
 final class PillPanel {
     private let panel: NSPanel
+    private let host: PillHost
+    private var anchor = NSPoint.zero
     let model = PillModel()
+    /// Where the window currently sits, for diagnostics.
+    var frame: NSRect { panel.frame }
 
     init() {
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 360, height: 60),
+            contentRect: NSRect(x: 0, y: 0, width: 80, height: 40),
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -144,7 +154,8 @@ final class PillPanel {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         panel.hidesOnDeactivate = false
         panel.ignoresMouseEvents = true
-        let host = NSHostingView(rootView: PillView(model: model).frame(maxWidth: .infinity, maxHeight: .infinity))
+        // The padding leaves room for the spring that plays when the pill appears.
+        host = PillHost(rootView: AnyView(PillView(model: model).padding(8)))
         panel.contentView = host
     }
 
@@ -162,18 +173,29 @@ final class PillPanel {
         case .recording(handsFree: true), .failed: panel.ignoresMouseEvents = false
         default: panel.ignoresMouseEvents = true
         }
-        if !panel.isVisible {
-            position()
-            panel.orderFrontRegardless()
+        let appearing = !panel.isVisible
+        if appearing {
+            let mouse = NSEvent.mouseLocation
+            let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
+            if let area = screen?.visibleFrame { anchor = NSPoint(x: area.midX, y: area.minY) }
         }
+        guard model.mode != mode || appearing else { return }
         model.mode = mode
-    }
-
-    private func position() {
-        let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
-        guard let area = screen?.visibleFrame else { return }
-        let size = panel.frame.size
-        panel.setFrameOrigin(NSPoint(x: area.midX - size.width / 2, y: area.minY))
+        // SwiftUI lays the new content out on the next pass; fit the window to it then.
+        DispatchQueue.main.async { [self] in
+            host.layoutSubtreeIfNeeded()
+            let size = host.fittingSize
+            let grows = size.width >= panel.frame.width
+            let frame = NSRect(x: anchor.x - size.width / 2, y: anchor.y, width: size.width, height: size.height)
+            if grows || appearing {
+                panel.setFrame(frame, display: true)
+            } else {
+                // Shrink only after the pill has finished narrowing, or its edges would be cut off.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [self] in
+                    if model.mode == mode { panel.setFrame(frame, display: true) }
+                }
+            }
+            if appearing { panel.orderFrontRegardless() }
+        }
     }
 }

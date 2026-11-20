@@ -89,7 +89,7 @@ With the local model, audio and text stay on your Mac. Legato has no analytics a
 
 ## What is not there yet
 
-Legato is young. The vocabulary works by correcting the transcript after the fact; it does not yet bias the model itself. The scan tests terms with synthetic voices, which do not pronounce things the way you do. There is no notarized download, so for now you build it from source. Rules per app, editing selected text by voice, and learning new words from your corrections are on the list.
+Legato is young. Very short utterances are its weak spot: a lone word like "teste" gives the model too little to tell which language it is hearing, and it sometimes answers in the wrong one. Full sentences do not have this problem. The vocabulary works by correcting the transcript after the fact; it does not yet bias the model itself. The scan tests terms with synthetic voices, which do not pronounce things the way you do. There is no notarized download, so for now you build it from source. Rules per app, editing selected text by voice, and learning new words from your corrections are on the list.
 
 ## Development
 
