@@ -59,9 +59,10 @@ actor ParakeetEngine {
     private var loaded: LocalModel?
     private var loading: (model: LocalModel, task: Task<AsrManager, Error>)?
     private var progress: @Sendable (Double) -> Void = { _ in }
-    private var ctcModels: CtcModels?
+    /// One load of the listener's model, shared by every vocabulary that needs it.
+    private var ctcModels: Task<CtcModels, Error>?
     private var boosting: (terms: [String], session: VocabularyBoostingSession)?
-    private var preparing: (terms: [String], task: Task<Void, Never>)?
+    private var preparing: (id: UUID, terms: [String], task: Task<Void, Never>)?
 
     /// Download progress goes here no matter which caller started the load.
     func onProgress(_ handler: @escaping @Sendable (Double) -> Void) { progress = handler }
@@ -105,38 +106,44 @@ actor ParakeetEngine {
         manager = nil
         loaded = nil
         boosting = nil
-        ctcModels = nil
         preparing?.task.cancel()
         preparing = nil
+        ctcModels?.cancel()
+        ctcModels = nil
         await old?.cleanup()
     }
 
     /// Gets the vocabulary listener ready for these terms, downloading its model the first time.
     /// Failures are left silent: without it, dictation still works with text-only corrections.
     func prepareVocabulary(_ terms: [String]) {
-        if terms.isEmpty {
+        if boosting?.terms == terms || preparing?.terms == terms { return }
+        preparing?.task.cancel()
+        preparing = nil
+        guard !terms.isEmpty else {
             boosting = nil
             return
         }
-        if boosting?.terms == terms || preparing?.terms == terms { return }
-        preparing?.task.cancel()
+        let models = ctcModels ?? Task { try await CtcModels.downloadAndLoad(variant: .ctc110m) }
+        ctcModels = models
+        let id = UUID()
         let task = Task {
+            // Only this task's own record is cleared: a newer one may have replaced it meanwhile.
+            defer { if preparing?.id == id { preparing = nil } }
+            let loaded: CtcModels
             do {
-                let models: CtcModels
-                if let ctcModels {
-                    models = ctcModels
-                } else {
-                    models = try await CtcModels.downloadAndLoad(variant: .ctc110m)
-                    ctcModels = models
-                }
-                let context = CustomVocabularyContext(terms: terms.map { CustomVocabularyTerm(text: $0) })
-                let session = try await VocabularyBoostingSession(vocabulary: context, ctcModels: models)
-                guard !Task.isCancelled else { return }
-                boosting = (terms, session)
-            } catch {}
-            if preparing?.terms == terms { preparing = nil }
+                loaded = try await models.value
+            } catch {
+                if ctcModels == models { ctcModels = nil }
+                return
+            }
+            let context = CustomVocabularyContext(terms: terms.map { CustomVocabularyTerm(text: $0) })
+            guard !Task.isCancelled,
+                let session = try? await VocabularyBoostingSession(vocabulary: context, ctcModels: loaded),
+                !Task.isCancelled
+            else { return }
+            boosting = (terms, session)
         }
-        preparing = (terms, task)
+        preparing = (id, terms, task)
     }
 
     /// Waits for `prepareVocabulary` to finish. For the command line, where there is no hurry.

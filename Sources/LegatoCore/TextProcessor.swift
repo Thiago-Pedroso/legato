@@ -41,7 +41,9 @@ public enum TextProcessor {
     }
 
     /// A vocabulary term that a second listen to the audio found where the transcript has `heard`.
-    /// `margin` is how much better the term fits the sound than the transcribed words do.
+    /// `margin` is the listener's own comparison: the term's score, including the bonus FluidAudio
+    /// gives listed terms, minus the score of the transcribed words. It is not a pure sound
+    /// measure; the ordinary-word check in `applyAcousticMatches` is what keeps it honest.
     public struct AcousticMatch: Equatable {
         public var heard: String
         public var term: String
@@ -55,24 +57,29 @@ public enum TextProcessor {
     }
 
     /// Puts the matched terms into the text, except where the transcript holds ordinary words
-    /// (`isWord`) or the sound barely favours the term. A real word heard clearly is more often
-    /// right than a name that happens to sound close: "pensou" must not become "Pensy".
+    /// (`isWord`), a name the model spelled on purpose (a capital inside a word, as in "GitHub"),
+    /// or a weak match. A real word heard clearly is more often right than a name that happens to
+    /// sound close: "pensou" must not become "Pensy", nor "GitHub" become "GitLab".
     public static func applyAcousticMatches(
         _ matches: [AcousticMatch], to text: String, minMargin: Float = 1, isWord: (String) -> Bool
     ) -> String {
         var result = text
-        var cursor = result.startIndex
+        // The rescorer lists its matches by strength, not position, so each one is looked up
+        // in the whole text. A repeated mishearing is fixed one occurrence per match, in order.
         for match in matches where match.margin >= minMargin {
             let heard = match.heard.trimmingCharacters(in: .punctuationCharacters.union(.whitespaces))
             let words = heard.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map { $0.lowercased() }
             guard !words.isEmpty, !words.allSatisfy(isWord) else { continue }
+            let deliberateName = heard.split(separator: " ").contains { word in
+                zip(word, word.dropFirst()).contains { $0.isLowercase && $1.isUppercase }
+            }
+            guard !deliberateName else { continue }
             let pattern = "(?<![\\p{L}\\p{N}])" + NSRegularExpression.escapedPattern(for: heard) + "(?![\\p{L}\\p{N}])"
             guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
-                let found = regex.firstMatch(in: result, range: NSRange(cursor..., in: result)),
+                let found = regex.firstMatch(in: result, range: NSRange(result.startIndex..., in: result)),
                 let range = Range(found.range, in: result)
             else { continue }
             result.replaceSubrange(range, with: match.term)
-            cursor = result.index(range.lowerBound, offsetBy: match.term.count)
         }
         return result
     }

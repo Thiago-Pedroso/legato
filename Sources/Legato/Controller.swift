@@ -107,6 +107,7 @@ final class Controller: ObservableObject {
     // MARK: Start-up
 
     func launch() {
+        restoreOutput()
         startHotkey()
         // The app is useful the moment it opens only if the model is already in memory.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.warmUp() }
@@ -276,7 +277,8 @@ final class Controller: ObservableObject {
         let entry: HistoryEntry
         do {
             // Audio goes to disk first. Whatever happens next, the dictation is not lost.
-            entry = try history.begin(samples: samples, engine: engineName, error: L.t("Interrupted", "Interrompido"))
+            entry = try history.begin(
+                samples: samples, engine: engineName, error: L.t("Interrupted", "Interrompido"), app: targetApp)
             entries = history.entries
         } catch {
             flash(.failed(error.localizedDescription), seconds: 4)
@@ -285,15 +287,23 @@ final class Controller: ObservableObject {
         transcribe(samples, entry: entry.id, paste: true, app: targetApp)
     }
 
+    /// Kept on disk too: if Legato dies mid-recording, the next launch unmutes the speakers.
+    private static let mutedOutputKey = "mutedOutput"
+
     private func muteOutput() {
         guard mutedOutput == nil, let output = AudioDevices.defaultOutput, AudioDevices.isMuted(output) == false
         else { return }
+        UserDefaults.standard.set(AudioDevices.uid(of: output), forKey: Self.mutedOutputKey)
         AudioDevices.setMuted(output, true)
         mutedOutput = output
     }
 
     /// Unmutes only what Legato muted, so speakers the user silenced stay silent.
     func restoreOutput() {
+        if mutedOutput == nil, let uid = UserDefaults.standard.string(forKey: Self.mutedOutputKey) {
+            mutedOutput = AudioDevices.device(uid: uid)
+        }
+        UserDefaults.standard.removeObject(forKey: Self.mutedOutputKey)
         guard let output = mutedOutput else { return }
         AudioDevices.setMuted(output, false)
         mutedOutput = nil
@@ -304,9 +314,8 @@ final class Controller: ObservableObject {
     func retry(_ id: UUID, paste: Bool) {
         guard let data = try? Data(contentsOf: history.audioURL(for: id)), let samples = WAV.decode(data) else { return }
         // Asked for by hand, so the text goes through even if it looks like the wrong language.
-        transcribe(
-            samples, entry: id, paste: paste, app: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
-            verify: false)
+        let app = history.entries.first { $0.id == id }?.app ?? NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        transcribe(samples, entry: id, paste: paste, app: app, verify: false)
     }
 
     private func transcribe(_ samples: [Float], entry id: UUID, paste: Bool, app: String?, verify: Bool = true) {

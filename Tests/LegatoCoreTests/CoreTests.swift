@@ -109,6 +109,19 @@ import Testing
         #expect(text == "Fala com o Claude Code sobre o deploy na Contabo.")
     }
 
+    @Test func acousticMatchesApplyInAnyOrder() {
+        let matches = [
+            TextProcessor.AcousticMatch(heard: "contabu", term: "Contabo", margin: 5),
+            TextProcessor.AcousticMatch(heard: "pensi", term: "Pensy", margin: 5),
+        ]
+        #expect(TextProcessor.applyAcousticMatches(matches, to: "pensi e contabu") { _ in false } == "Pensy e Contabo")
+    }
+
+    @Test func acousticMatchesLeaveDeliberateNamesAlone() {
+        let matches = [TextProcessor.AcousticMatch(heard: "GitHub", term: "GitLab", margin: 4)]
+        #expect(TextProcessor.applyAcousticMatches(matches, to: "Abre no GitHub.") { _ in false } == "Abre no GitHub.")
+    }
+
     @Test func processTrimsAndAddsSpace() {
         #expect(TextProcessor.process("  oi tudo bem \n", vocabulary: [], replacements: [], trailingSpace: true) == "oi tudo bem ")
         #expect(TextProcessor.process("   ", vocabulary: [], replacements: [], trailingSpace: true) == "")
@@ -131,6 +144,12 @@ import Testing
         #expect(!check("Teste."))
         #expect(!check("Sim.", confidence: 0.5))
         #expect(!check("Uh, dois, três."))
+    }
+
+    @Test func neverJudgesASingleWordOrNumber() {
+        for text in ["Oi.", "Tchau.", "Ok", "Show.", "Commit.", "Netflix.", "123.", "42"] {
+            #expect(!check(text, confidence: 0.5), "\(text)")
+        }
     }
 
     @Test func trustsLongOrConfidentOrKnownText() {

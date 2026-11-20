@@ -11,6 +11,22 @@ struct InputDevice: Identifiable, Hashable {
 /// The few Core Audio questions Legato asks: which microphones exist, and muting the speakers.
 enum AudioDevices {
     static func inputs() -> [InputDevice] {
+        all().compactMap { id in
+            guard hasInput(id), let uid = uid(of: id), let name = string(id, kAudioObjectPropertyName) else { return nil }
+            return InputDevice(id: id, uid: uid, name: name)
+        }
+    }
+
+    static func uid(of device: AudioDeviceID) -> String? {
+        string(device, kAudioDevicePropertyDeviceUID)
+    }
+
+    /// Any device, input or output, by the UID that `uid(of:)` gave for it.
+    static func device(uid: String) -> AudioDeviceID? {
+        all().first { self.uid(of: $0) == uid }
+    }
+
+    private static func all() -> [AudioDeviceID] {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices, mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain)
@@ -20,12 +36,7 @@ enum AudioDevices {
         var ids = [AudioDeviceID](repeating: 0, count: Int(size) / MemoryLayout<AudioDeviceID>.size)
         guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &ids) == noErr
         else { return [] }
-        return ids.compactMap { id in
-            guard hasInput(id), let uid = string(id, kAudioDevicePropertyDeviceUID),
-                let name = string(id, kAudioObjectPropertyName)
-            else { return nil }
-            return InputDevice(id: id, uid: uid, name: name)
-        }
+        return ids
     }
 
     static func input(uid: String) -> AudioDeviceID? {

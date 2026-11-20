@@ -39,9 +39,11 @@ final class CorrectionWatcher {
     private func begin() {
         // Asked of the app in front: the system-wide element often fails to answer this.
         guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier else { return }
+        let app = AXUIElementCreateApplication(pid)
+        // This runs on the main thread; a busy app must not stall the hotkey for AX's default 6 s.
+        AXUIElementSetMessagingTimeout(app, 0.3)
         var focused: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-            AXUIElementCreateApplication(pid), kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
             let focused, CFGetTypeID(focused) == AXUIElementGetTypeID()
         else { return }
         let element = focused as! AXUIElement

@@ -12,10 +12,12 @@ public struct HistoryEntry: Codable, Equatable, Identifiable {
     public var engine: String
     public var status: Status
     public var error: String?
+    /// Bundle identifier of the app the dictation was meant for.
+    public var app: String?
 
     public init(
         id: UUID = UUID(), date: Date = Date(), text: String = "", duration: TimeInterval,
-        engine: String, status: Status, error: String? = nil
+        engine: String, status: Status, error: String? = nil, app: String? = nil
     ) {
         self.id = id
         self.date = date
@@ -24,6 +26,7 @@ public struct HistoryEntry: Codable, Equatable, Identifiable {
         self.engine = engine
         self.status = status
         self.error = error
+        self.app = app
     }
 }
 
@@ -54,9 +57,10 @@ public final class HistoryStore {
     }
 
     /// Saves the audio and records the dictation as failed until a transcript arrives.
-    public func begin(samples: [Float], engine: String, error: String) throws -> HistoryEntry {
+    public func begin(samples: [Float], engine: String, error: String, app: String? = nil) throws -> HistoryEntry {
         let entry = HistoryEntry(
-            duration: Double(samples.count) / Double(WAV.sampleRate), engine: engine, status: .failed, error: error)
+            duration: Double(samples.count) / Double(WAV.sampleRate), engine: engine, status: .failed, error: error,
+            app: app)
         try WAV.encode(samples).write(to: audioURL(for: entry.id), options: .atomic)
         entries.insert(entry, at: 0)
         save()
