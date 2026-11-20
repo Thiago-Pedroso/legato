@@ -1,0 +1,19 @@
+name: CI
+
+# macOS minutes cost ten times more on a private repository, so this runs on pull requests
+# and by hand. Once the repository is public, add `push: branches: [main]`.
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+      - run: swift build -c release
+      - run: swift test

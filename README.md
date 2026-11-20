@@ -95,7 +95,7 @@ With the local model, audio and text stay on your Mac. Legato has no analytics a
 
 ## What is not there yet
 
-Legato is young. Very short utterances are its weak spot: a lone word like "teste" gives the model too little to tell which language it is hearing, and it sometimes answers in the wrong one. When a clip under two seconds comes back unsure and in another language, Legato does not type it; the pill says it didn't catch that, and the History tab keeps what the model wrote. Whisper large-v3 turbo and Canary 1B, both forced to Portuguese, did no better on the same clips, so a second model is not the answer. Full sentences do not have this problem.  The scan tests terms with synthetic voices, which do not pronounce things the way you do. There is no notarized download, so for now you build it from source. Editing selected text by voice is on the list.
+Legato is young. Very short utterances are its weak spot: a lone word like "teste" gives the model too little to tell which language it is hearing, and it sometimes answers in the wrong one. When a clip under two seconds comes back unsure and in another language, Legato does not type it; the pill says it didn't catch that, and the History tab keeps what the model wrote. Whisper large-v3 turbo and Canary 1B, both forced to Portuguese, did no better on the same clips, so a second model is not the answer. Full sentences do not have this problem. The scan tests terms with synthetic voices, which do not pronounce things the way you do. There is no notarized download, so for now you build it from source. Editing selected text by voice is on the list.
 
 ## Development
 
@@ -105,6 +105,8 @@ make run    # build and open build/Legato.app
 ```
 
 The code is a Swift package with two targets. `LegatoCore` holds the logic that can be tested without a Mac's microphone or screen. `Legato` is the app.
+
+`make dist` zips the app for someone else. Pushing a tag such as `v0.2.0` makes GitHub Actions run the tests and publish that zip as a release; with a Developer ID certificate and an App Store Connect key in the repository secrets (listed at the top of `.github/workflows/release.yml`) the app is also signed and notarized, so it opens on any Mac without a warning.
 
 ## Credits
 

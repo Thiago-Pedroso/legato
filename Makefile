@@ -2,7 +2,7 @@
 CLT := /Library/Developer/CommandLineTools/Library/Developer
 TEST_FLAGS := $(if $(wildcard $(CLT)/Frameworks/Testing.framework),-Xswiftc -F -Xswiftc $(CLT)/Frameworks -Xlinker -F -Xlinker $(CLT)/Frameworks -Xlinker -rpath -Xlinker $(CLT)/Frameworks -Xlinker -rpath -Xlinker $(CLT)/usr/lib,)
 
-.PHONY: app install run test clean signing claude-command
+.PHONY: app install run test clean signing claude-command dist
 
 app:
 	./scripts/build-app.sh
@@ -16,6 +16,10 @@ run: app
 
 signing:
 	./scripts/dev-signing.sh
+
+# A zip to hand to other people. See scripts/package.sh for signing and notarization.
+dist: app
+	./scripts/package.sh
 
 # Installs the /legato-vocabulary command for Claude Code.
 claude-command:

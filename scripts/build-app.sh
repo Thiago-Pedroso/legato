@@ -25,7 +25,12 @@ iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/Legato.icns"
 IDENTITY="${LEGATO_SIGN_IDENTITY:-Legato Dev}"
 DEV_KEYCHAIN="$HOME/Library/Keychains/legato-dev.keychain-db"
 [ -f "$DEV_KEYCHAIN" ] && security unlock-keychain -p legato "$DEV_KEYCHAIN"
-if security find-identity -p codesigning | grep -q "\"$IDENTITY\""; then
+if [[ "$IDENTITY" == "Developer ID Application"* ]]; then
+  # A build for other people: notarization requires the hardened runtime, and under it the
+  # microphone needs its entitlement.
+  codesign --force --sign "$IDENTITY" --options runtime --timestamp \
+    --entitlements Resources/Legato.entitlements "$APP"
+elif security find-identity -p codesigning | grep -q "\"$IDENTITY\""; then
   codesign --force --sign "$IDENTITY" "$APP"
 else
   codesign --force --sign - "$APP"
