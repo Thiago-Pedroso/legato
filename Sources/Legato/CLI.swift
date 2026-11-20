@@ -62,6 +62,11 @@ enum CLI {
                 }
             }
             return 0
+        case "--cleanup":
+            // Runs the on-device cleanup on a line of text, to check it outside a dictation.
+            guard let text = rest.first else { return usage() }
+            if let reason = OnDeviceCleanup.unavailableReason { note("unavailable: \(reason)") }
+            return wait { print(try await OnDeviceCleanup.cleanUp(text, prompt: Settings.defaultCleanupPrompt)) }
         case "vocab":
             return Vocab.run(rest)
         default:
@@ -74,6 +79,7 @@ enum CLI {
             """
             usage:
               Legato --transcribe <audio>... [--model v3]   transcribe files the way the app would, with your vocabulary
+              Legato --cleanup <text>                       tidy a line with Apple's on-device model
               Legato vocab candidates <folder>...           list names and jargon found in the folders' prose
               Legato vocab probe <term>...                  speak each term and report how the model hears it
               Legato vocab suggest --source <label>         read probe results on stdin and queue them for approval

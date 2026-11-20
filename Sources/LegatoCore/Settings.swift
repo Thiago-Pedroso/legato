@@ -15,6 +15,15 @@ public enum LocalModel: String, Codable, CaseIterable, Identifiable {
     public var id: String { rawValue }
 }
 
+/// Where the optional cleanup pass runs.
+public enum CleanupEngine: String, Codable, CaseIterable, Identifiable {
+    /// Apple's on-device model (macOS 26 with Apple Intelligence on). Nothing leaves the Mac.
+    case onDevice
+    /// Any chat completions API.
+    case api
+    public var id: String { rawValue }
+}
+
 public struct Settings: Codable, Equatable {
     public var trigger: TriggerKey = .fn
     public var engine: EngineKind = .local
@@ -37,6 +46,7 @@ public struct Settings: Codable, Equatable {
     public var unloadAfterMinutes: Int = 15
     public var historyLimit: Int = 100
     public var cleanupEnabled: Bool = false
+    public var cleanupEngine: CleanupEngine = .api
     public var cleanupBaseURL: String = "https://api.groq.com/openai/v1"
     public var cleanupModel: String = ""
     public var cleanupPrompt: String = Settings.defaultCleanupPrompt
@@ -55,7 +65,7 @@ public struct Settings: Codable, Equatable {
 
     /// Whether a dictation going into `app` should pass through the cleanup model.
     public func cleansUp(in app: String?) -> Bool {
-        guard cleanupEnabled, !cleanupModel.isEmpty else { return false }
+        guard cleanupEnabled, cleanupEngine == .onDevice || !cleanupModel.isEmpty else { return false }
         return cleanupEverywhere || app.map(cleanupApps.contains) == true
     }
 
@@ -83,6 +93,7 @@ public struct Settings: Codable, Equatable {
         unloadAfterMinutes = value(.unloadAfterMinutes, d.unloadAfterMinutes)
         historyLimit = value(.historyLimit, d.historyLimit)
         cleanupEnabled = value(.cleanupEnabled, d.cleanupEnabled)
+        cleanupEngine = value(.cleanupEngine, d.cleanupEngine)
         cleanupBaseURL = value(.cleanupBaseURL, d.cleanupBaseURL)
         cleanupModel = value(.cleanupModel, d.cleanupModel)
         cleanupPrompt = value(.cleanupPrompt, d.cleanupPrompt)

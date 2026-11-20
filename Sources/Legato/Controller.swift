@@ -352,9 +352,14 @@ final class Controller: ObservableObject {
                 }
                 if settings.cleansUp(in: app), !text.isEmpty {
                     // Cleanup is a nicety: if it fails or stalls, the plain transcript goes through.
-                    text = (try? await APIEngine.cleanUp(
-                        text, baseURL: settings.cleanupBaseURL, model: settings.cleanupModel,
-                        key: Keychain.get("cleanup"), prompt: settings.cleanupPrompt)) ?? text
+                    switch settings.cleanupEngine {
+                    case .onDevice:
+                        text = (try? await OnDeviceCleanup.cleanUp(text, prompt: settings.cleanupPrompt)) ?? text
+                    case .api:
+                        text = (try? await APIEngine.cleanUp(
+                            text, baseURL: settings.cleanupBaseURL, model: settings.cleanupModel,
+                            key: Keychain.get("cleanup"), prompt: settings.cleanupPrompt)) ?? text
+                    }
                 }
                 let final = TextProcessor.process(
                     text, vocabulary: settings.vocabulary, replacements: settings.replacements,

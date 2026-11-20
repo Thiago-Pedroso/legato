@@ -281,10 +281,20 @@ private struct TranscriptionTab: View {
             Section(L.t("Cleanup", "Limpeza")) {
                 Toggle(L.t("Tidy the text with an AI model", "Arrumar o texto com um modelo de IA"), isOn: $controller.settings.cleanupEnabled)
                 if controller.settings.cleanupEnabled {
-                    TextField(L.t("Address", "Endereço"), text: $controller.settings.cleanupBaseURL)
-                    TextField(L.t("Model", "Modelo"), text: $controller.settings.cleanupModel, prompt: Text("llama-3.3-70b-versatile"))
-                    SecureField(L.t("Key", "Chave"), text: $cleanupKey)
-                        .onChange(of: cleanupKey) { _, value in Keychain.set("cleanup", value) }
+                    Picker(L.t("Run", "Rodar"), selection: $controller.settings.cleanupEngine) {
+                        Text(L.t("On this Mac (Apple Intelligence)", "Neste Mac (Apple Intelligence)")).tag(CleanupEngine.onDevice)
+                        Text(L.t("With an API", "Com uma API")).tag(CleanupEngine.api)
+                    }
+                    if controller.settings.cleanupEngine == .onDevice {
+                        if let reason = OnDeviceCleanup.unavailableReason {
+                            Label(reason, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary)
+                        }
+                    } else {
+                        TextField(L.t("Address", "Endereço"), text: $controller.settings.cleanupBaseURL)
+                        TextField(L.t("Model", "Modelo"), text: $controller.settings.cleanupModel, prompt: Text("llama-3.3-70b-versatile"))
+                        SecureField(L.t("Key", "Chave"), text: $cleanupKey)
+                            .onChange(of: cleanupKey) { _, value in Keychain.set("cleanup", value) }
+                    }
                     TextField(L.t("Instructions", "Instruções"), text: $controller.settings.cleanupPrompt, axis: .vertical)
                         .lineLimit(3...6)
                     Picker(L.t("Use in", "Usar em"), selection: $controller.settings.cleanupEverywhere) {
@@ -315,8 +325,8 @@ private struct TranscriptionTab: View {
                 }
                 Text(
                     L.t(
-                        "Removes filler words and fixes punctuation. Off by default: it sends the text to the service you choose and adds a short wait.",
-                        "Tira vícios de fala e ajusta a pontuação. Vem desligado: envia o texto ao serviço que você escolher e soma uma pequena espera.")
+                        "Removes filler words and fixes punctuation. Off by default because it adds a short wait. With an API, the text goes to the service you choose; on this Mac, it stays here.",
+                        "Tira vícios de fala e ajusta a pontuação. Vem desligado porque soma uma pequena espera. Com uma API, o texto vai ao serviço escolhido; neste Mac, ele fica aqui.")
                 )
                 .font(.callout).foregroundStyle(.secondary)
             }

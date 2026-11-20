@@ -68,7 +68,7 @@ In a test with a synthetic Portuguese voice reading 20 sentences at two speeds, 
 
 **Learning from your fixes.** When Legato gets a name wrong and you retype it, that is the best hint there is. For a minute after each dictation Legato rereads the text field it typed into, and if you turn one of its words into a name or term ("contabu" into "Contabo"), the term shows up among the suggestions. Rewording in ordinary language is ignored. Apps that do not expose their text, which includes many terminals, are skipped. You can turn this off.
 
-**Cleanup.** An optional pass through a chat model that removes filler words and fixes punctuation. It is off by default because it sends the text to the service you pick and adds a short wait. You can keep it to the apps where it pays off, say the terminal where you talk to a coding agent, and leave your messages as you said them.
+**Cleanup.** An optional pass through a language model that removes filler words and fixes punctuation. It runs on Apple's on-device model when Apple Intelligence is on (macOS 26), so the text stays on your Mac, or through a chat API of your choice. It is off by default because it adds a short wait, and if the model is slow or unavailable the plain transcript goes through. You can keep it to the apps where it pays off, say the terminal where you talk to a coding agent, and leave your messages as you said them.
 
 **History.** Every dictation with its audio. Copy it, listen to it, transcribe it again or delete it. Recordings live in `~/Library/Application Support/Legato`.
 

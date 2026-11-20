@@ -227,6 +227,9 @@ import Testing
         #expect(!settings.cleansUp(in: nil))
         settings.cleanupModel = ""
         #expect(!settings.cleansUp(in: "com.mitchellh.ghostty"))
+        // The on-device model needs no model name.
+        settings.cleanupEngine = .onDevice
+        #expect(settings.cleansUp(in: "com.mitchellh.ghostty"))
     }
 
     @Test func settingsSurviveMissingKeys() throws {
