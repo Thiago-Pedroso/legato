@@ -18,8 +18,9 @@ enum Permissions {
     }
 
     /// What macOS does when fn is pressed alone: 0 nothing, 1 input source, 2 emoji, 3 dictation.
+    /// A Mac where the setting was never touched has no value stored and opens the emoji picker.
     static var fnKeyAction: Int {
-        UserDefaults(suiteName: "com.apple.HIToolbox")?.integer(forKey: "AppleFnUsageType") ?? 0
+        UserDefaults(suiteName: "com.apple.HIToolbox")?.object(forKey: "AppleFnUsageType") as? Int ?? 2
     }
 
     static func open(_ pane: String) {
