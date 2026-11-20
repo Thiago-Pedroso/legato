@@ -58,7 +58,9 @@ Your audio is saved to disk before transcription starts. If anything goes wrong,
 
 **Where transcription runs.** On this Mac, with Parakeet Ultra (the default) or the smaller Parakeet v3. Or through any service that speaks the OpenAI transcription API, such as Groq, OpenAI or a server of your own. With an API your audio is sent to that service; the key is stored in your keychain.
 
-**Vocabulary.** Names and terms you want spelled your way, like `Claude Code` or the name of your company. When the transcript comes close to one of them, Legato corrects it. There are also literal replacements: say "my email", get your address.
+**Vocabulary.** Names and terms you want spelled your way, like `Claude Code` or the name of your company. With the local model, a second, smaller model (100 MB, downloaded the first time you add a term) listens to each dictation again for those terms. It only overrules the transcript where it heard something that is not an ordinary word, so "pensou" stays "pensou" even with `Pensy` on the list. Spelling that comes close to a term is corrected too. There are also literal replacements: say "my email", get your address.
+
+In a test with a synthetic Portuguese voice reading 20 sentences at two speeds, with 19 of the author's terms, the transcript alone spelled 1 of 42 occurrences right. Spelling correction brought that to 19, and the second listen to 30. Of 28 recordings without any term, none were changed.
 
 **Suggestions from your projects.** Typing a vocabulary by hand is a chore nobody does. If you use Claude Code, run `make claude-command` once and then `/legato-vocabulary ~/Projects/my-project` in any session. It reads the prose in those folders (READMEs, notes, commit messages), picks out the names and jargon, and then tests each one: your Mac speaks the term with a synthetic voice and the speech model transcribes it. Terms the model already gets right are dropped. The rest wait in the Vocabulary tab, each showing how it was misheard, until you accept or dismiss them. Nothing is added on its own. The same steps work from a terminal with `Legato vocab candidates`, `probe` and `suggest`.
 
@@ -89,7 +91,7 @@ With the local model, audio and text stay on your Mac. Legato has no analytics a
 
 ## What is not there yet
 
-Legato is young. Very short utterances are its weak spot: a lone word like "teste" gives the model too little to tell which language it is hearing, and it sometimes answers in the wrong one. Full sentences do not have this problem. The vocabulary works by correcting the transcript after the fact; it does not yet bias the model itself. The scan tests terms with synthetic voices, which do not pronounce things the way you do. There is no notarized download, so for now you build it from source. Rules per app, editing selected text by voice, and learning new words from your corrections are on the list.
+Legato is young. Very short utterances are its weak spot: a lone word like "teste" gives the model too little to tell which language it is hearing, and it sometimes answers in the wrong one. Full sentences do not have this problem.  The scan tests terms with synthetic voices, which do not pronounce things the way you do. There is no notarized download, so for now you build it from source. Rules per app, editing selected text by voice, and learning new words from your corrections are on the list.
 
 ## Development
 
@@ -102,7 +104,7 @@ The code is a Swift package with two targets. `LegatoCore` holds the logic that 
 
 ## Credits
 
-Speech recognition is [Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) by NVIDIA, in the [Parakeet Ultra](https://huggingface.co/moondream/parakeet-ultra) version by Moondream, both under CC BY 4.0. It runs through [FluidAudio](https://github.com/FluidInference/FluidAudio), which is Apache 2.0. Legato owes its shape to the apps that made this kind of dictation feel normal: Wispr Flow, Superwhisper, Handy and VoiceInk.
+Speech recognition is [Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) by NVIDIA, in the [Parakeet Ultra](https://huggingface.co/moondream/parakeet-ultra) version by Moondream, both under CC BY 4.0. It runs through [FluidAudio](https://github.com/FluidInference/FluidAudio), which is Apache 2.0. The vocabulary listener is the Parakeet CTC 110M model, through the same library. Legato owes its shape to the apps that made this kind of dictation feel normal: Wispr Flow, Superwhisper, Handy and VoiceInk.
 
 ## License
 

@@ -3,6 +3,28 @@ import AppKit
 import Security
 import ServiceManagement
 
+/// The system spelling dictionaries, used to tell ordinary words from names and jargon.
+enum Spelling {
+    static func isWord(_ word: String, in languages: [String]) -> Bool {
+        let checker = NSSpellChecker.shared
+        return languages.contains { language in
+            checker.checkSpelling(
+                of: word, startingAt: 0, language: language, wrap: false, inSpellDocumentWithTag: 0, wordCount: nil
+            ).location == NSNotFound
+        }
+    }
+
+    /// The dictionary for a dictation language code: "pt" is Brazilian Portuguese when installed.
+    /// "auto" follows the system language.
+    static func dictionary(for code: String) -> String {
+        let code = code == "auto" ? String(Locale.preferredLanguages.first?.prefix(2) ?? "en") : code
+        let available = NSSpellChecker.shared.availableLanguages
+        if available.contains(code) { return code }
+        return available.first { $0.hasPrefix(code + "_") && $0.hasSuffix("BR") }
+            ?? available.first { $0.hasPrefix(code + "_") } ?? code
+    }
+}
+
 enum Permissions {
     static var microphone: AVAuthorizationStatus { AVCaptureDevice.authorizationStatus(for: .audio) }
 

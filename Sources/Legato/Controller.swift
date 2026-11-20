@@ -111,6 +111,10 @@ final class Controller: ObservableObject {
             modelState = settings.localModel.isDownloaded ? .resting : .missing
             if settings.engine == .local { warmUp() } else { Task { await engine.unload() } }
         }
+        if old.vocabulary != settings.vocabulary, modelState == .ready {
+            let terms = settings.vocabulary
+            Task { await engine.prepareVocabulary(terms) }
+        }
         if old.historyLimit != settings.historyLimit { prune() }
         if old.unloadAfterMinutes != settings.unloadAfterMinutes, modelState == .ready { scheduleUnload() }
     }
@@ -138,6 +142,7 @@ final class Controller: ObservableObject {
                 guard settings.localModel == model else { return }
                 modelState = .ready
                 scheduleUnload()
+                await engine.prepareVocabulary(settings.vocabulary)
             } catch {
                 guard settings.localModel == model else { return }
                 modelState = .failed(error.localizedDescription)
@@ -272,6 +277,7 @@ final class Controller: ObservableObject {
                 case .local:
                     if modelState == .resting || modelState == .missing { loadModel() }
                     text = try await engine.transcribe(samples, model: settings.localModel, language: settings.language)
+                        .corrected(language: settings.language)
                     if self.settings.localModel == settings.localModel, self.settings.engine == .local {
                         modelState = .ready
                         scheduleUnload()

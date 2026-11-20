@@ -73,7 +73,7 @@ enum CLI {
         note(
             """
             usage:
-              Legato --transcribe <audio>... [--model v3]   transcribe files with the local model
+              Legato --transcribe <audio>... [--model v3]   transcribe files the way the app would, with your vocabulary
               Legato vocab candidates <folder>...           list names and jargon found in the folders' prose
               Legato vocab probe <term>...                  speak each term and report how the model hears it
               Legato vocab suggest --source <label>         read probe results on stdin and queue them for approval
@@ -95,14 +95,21 @@ enum CLI {
             var clock = Date()
             try await engine.load(model)
             note("\(model.title) loaded in \(String(format: "%.2f", Date().timeIntervalSince(clock)))s")
+            let settings = AppPaths.loadSettings() ?? Settings()
+            await engine.prepareVocabulary(settings.vocabulary)
+            await engine.vocabularyReady()
             for path in paths {
                 let samples = try AudioConverter().resampleAudioFile(path: path)
                 clock = Date()
-                let (text, confidence) = try await engine.transcribeDetailed(samples, model: model, language: "pt")
+                let transcript = try await engine.transcribe(samples, model: model, language: settings.language)
                 let seconds = Double(samples.count) / Double(WAV.sampleRate)
                 note(
-                    "\(String(format: "%.1f", seconds))s of audio in \(String(format: "%.2f", Date().timeIntervalSince(clock)))s, confidence \(String(format: "%.2f", confidence))")
-                print(text)
+                    "\(String(format: "%.1f", seconds))s of audio in \(String(format: "%.2f", Date().timeIntervalSince(clock)))s, confidence \(String(format: "%.2f", transcript.confidence))")
+                note("heard: \(transcript.text)")
+                print(
+                    TextProcessor.process(
+                        transcript.corrected(language: settings.language), vocabulary: settings.vocabulary,
+                        replacements: settings.replacements, trailingSpace: false))
             }
         }
     }

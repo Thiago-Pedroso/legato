@@ -48,13 +48,7 @@ enum Vocab {
     }
 
     static func isInDictionary(_ word: String) -> Bool {
-        let checker = NSSpellChecker.shared
-        for language in ["pt_BR", "en"] {
-            let range = checker.checkSpelling(
-                of: word, startingAt: 0, language: language, wrap: false, inSpellDocumentWithTag: 0, wordCount: nil)
-            if range.location == NSNotFound { return true }
-        }
-        return false
+        Spelling.isWord(word, in: ["pt_BR", "en"])
     }
 
     // MARK: probe
@@ -104,7 +98,7 @@ enum Vocab {
                     _ = shell("/usr/bin/say", ["-v", carrier.voice, "-o", file.path, "\(carrier.prefix) \(term) \(carrier.suffix)."])
                     guard let samples = try? AudioConverter().resampleAudioFile(path: file.path) else { continue }
                     tested += 1
-                    let text = try await engine.transcribe(samples, model: model, language: "pt")
+                    let text = try await engine.transcribe(samples, model: model, language: "pt").text
                     let middle = Probe.middle(of: text, prefix: carrier.prefix, suffix: carrier.suffix)
                     if TextProcessor.normalize(middle) == TextProcessor.normalize(term) { continue }
                     ok = false

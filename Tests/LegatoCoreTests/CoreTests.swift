@@ -81,6 +81,34 @@ import Testing
         #expect(TextProcessor.applyReplacements(in: "abre um PR para o projeto", rules) == "abre um pull request para o projeto")
     }
 
+    @Test func acousticMatchesFixNonWordsOnly() {
+        let words: Set<String> = ["o", "servidor", "da", "caiu", "de", "novo", "pensou"]
+        let matches = [
+            TextProcessor.AcousticMatch(heard: "contabu", term: "Contabo", margin: 4.8),
+            TextProcessor.AcousticMatch(heard: "caiu de", term: "Claude", margin: 3),
+        ]
+        let text = TextProcessor.applyAcousticMatches(matches, to: "O servidor da contabu caiu de novo.") {
+            words.contains($0)
+        }
+        #expect(text == "O servidor da Contabo caiu de novo.")
+    }
+
+    @Test func acousticMatchesNeedAClearMargin() {
+        let matches = [TextProcessor.AcousticMatch(heard: "Pense", term: "Pensy", margin: 0.2)]
+        #expect(TextProcessor.applyAcousticMatches(matches, to: "No canal da Pense.") { _ in false } == "No canal da Pense.")
+    }
+
+    @Test func acousticMatchesKeepPunctuationAndOrder() {
+        let matches = [
+            TextProcessor.AcousticMatch(heard: "Cloud Code", term: "Claude Code", margin: 6),
+            TextProcessor.AcousticMatch(heard: "contáble.", term: "Contabo", margin: 10),
+        ]
+        let text = TextProcessor.applyAcousticMatches(matches, to: "Fala com o Cloud Code sobre o deploy na contáble.") {
+            _ in false
+        }
+        #expect(text == "Fala com o Claude Code sobre o deploy na Contabo.")
+    }
+
     @Test func processTrimsAndAddsSpace() {
         #expect(TextProcessor.process("  oi tudo bem \n", vocabulary: [], replacements: [], trailingSpace: true) == "oi tudo bem ")
         #expect(TextProcessor.process("   ", vocabulary: [], replacements: [], trailingSpace: true) == "")
