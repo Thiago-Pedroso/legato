@@ -18,8 +18,9 @@ import Testing
         #expect(machine.triggerDown(at: 0.3) == .lock)
         #expect(machine.triggerUp(at: 0.4) == nil)
         #expect(machine.tick(at: 5) == nil)
-        #expect(machine.triggerDown(at: 9) == .finish)
-        #expect(machine.triggerUp(at: 9.1) == nil)
+        #expect(machine.triggerDown(at: 9) == nil)
+        #expect(machine.isRecording)
+        #expect(machine.triggerUp(at: 9.1) == .finish)
         #expect(machine.state == .idle)
     }
 

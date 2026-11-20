@@ -11,6 +11,9 @@ public struct HotkeyStateMachine: Equatable {
         /// A short tap just ended; recording continues while we wait for the second tap.
         case tapPending(deadline: TimeInterval)
         case locked
+        /// The tap that ends hands-free is down. The dictation ends when the key lifts,
+        /// so the text is never pasted while the trigger is still held.
+        case ending
     }
 
     public enum Action: Equatable {
@@ -38,14 +41,18 @@ public struct HotkeyStateMachine: Equatable {
             state = .locked
             return .lock
         case .locked:
-            state = .idle
-            return .finish
-        case .holding:
+            state = .ending
+            return nil
+        case .holding, .ending:
             return nil
         }
     }
 
     public mutating func triggerUp(at time: TimeInterval) -> Action? {
+        if state == .ending {
+            state = .idle
+            return .finish
+        }
         guard case .holding(let since) = state else { return nil }
         if time - since >= tapThreshold {
             state = .idle

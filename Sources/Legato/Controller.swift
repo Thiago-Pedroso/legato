@@ -382,7 +382,7 @@ final class Controller: ObservableObject {
     /// Shows what is true right now: recording wins over working, working over nothing.
     private func refreshPill() {
         if recorder.isRecording {
-            pill.show(.recording(handsFree: machine.state == .locked))
+            pill.show(.recording(handsFree: machine.state == .locked || machine.state == .ending))
             return
         }
         // A notice or a failure stays up for its time; the ticker must not wipe it.
