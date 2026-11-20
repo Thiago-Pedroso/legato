@@ -35,6 +35,7 @@ final class Controller: ObservableObject {
     private let recorder = Recorder()
     private let engine = ParakeetEngine()
     private let hotkey = HotkeyMonitor()
+    private let watcher = CorrectionWatcher()
     private var machine = HotkeyStateMachine() { didSet { hotkey.capturing = machine.isRecording } }
     /// Dictations being transcribed right now. Their history entries are not failures yet.
     @Published private(set) var inFlight: Set<UUID> = []
@@ -69,6 +70,10 @@ final class Controller: ObservableObject {
         modelState = settings.localModel.isDownloaded ? .resting : .missing
 
         recorder.onLevel = { [weak self] level in self?.pill.model.push(level: level) }
+        watcher.isWord = { [weak self] word in
+            Spelling.isWord(word, in: [Spelling.dictionary(for: self?.settings.language ?? "auto")])
+        }
+        watcher.onCorrection = { [weak self] heard, typed in self?.learn(heard: heard, typed: typed) }
         pill.model.onTap = { [weak self] in self?.pillTapped() }
         hotkey.trigger = settings.trigger
         hotkey.onTrigger = { [weak self] down, time in self?.trigger(down, at: time) }
@@ -238,6 +243,7 @@ final class Controller: ObservableObject {
         }
         hideTimer?.cancel()
         flashing = false
+        watcher.finish()
         if settings.sounds { Self.play("Tink") }
         if settings.muteWhileRecording {
             // After the start sound, which muting right away would cut off.
@@ -354,6 +360,7 @@ final class Controller: ObservableObject {
                 history.update(id) { $0.text = final; $0.status = .done; $0.error = nil; $0.engine = self.engineName }
                 prune()
                 if paste, Inserter.insert(final) {
+                    if settings.learnFromCorrections { watcher.watch(pasted: final) }
                     refreshPill()
                 } else {
                     Inserter.copy(final)
@@ -389,6 +396,18 @@ final class Controller: ObservableObject {
         let known = Set(settings.vocabulary.map(TextProcessor.normalize))
         let loaded = SuggestionStore.load(AppPaths.suggestions).filter { !known.contains($0.id) }
         if loaded != suggestions { suggestions = loaded }
+    }
+
+    /// The user retyped a word of a dictation into something that is not ordinary language.
+    private func learn(heard: String, typed: String) {
+        let common = heard.split(separator: " ").allSatisfy { watcher.isWord($0.lowercased()) }
+        let suggestion = Suggestion(
+            term: typed, heard: [HeardForm(text: heard, common: common)],
+            source: L.t("You corrected it", "Você corrigiu"))
+        let merged = SuggestionStore.merge(
+            SuggestionStore.load(AppPaths.suggestions), with: [suggestion], vocabulary: settings.vocabulary)
+        try? SuggestionStore.save(merged, to: AppPaths.suggestions)
+        reloadSuggestions()
     }
 
     func accept(_ ids: Set<String>) {

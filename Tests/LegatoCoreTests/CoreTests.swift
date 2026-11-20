@@ -142,6 +142,34 @@ import Testing
     }
 }
 
+@Suite struct CorrectionTests {
+    let words: Set<String> = ["o", "servidor", "da", "caiu", "de", "novo", "isso", "aquilo", "fala", "com", "a"]
+    func find(_ pasted: String, _ before: String, _ after: String) -> (heard: String, typed: String)? {
+        Corrections.find(pasted: pasted, before: before, after: after) { words.contains($0) }
+    }
+
+    @Test func learnsATermTypedOverAMishearing() {
+        let pasted = "O servidor da contabu caiu de novo. "
+        let found = find(pasted, "Oi! " + pasted, "Oi! O servidor da Contabo caiu de novo. ")
+        #expect(found?.heard == "contabu")
+        #expect(found?.typed == "Contabo")
+    }
+
+    @Test func learnsAPartialRetype() {
+        // Only the last letters were retyped; the whole word is what counts.
+        let found = find("fala com a vertex", "fala com a vertex", "fala com a Vertyx")
+        #expect(found?.heard == "vertex")
+        #expect(found?.typed == "Vertyx")
+    }
+
+    @Test func ignoresOrdinaryRewordingAndEditsOutsideTheDictation() {
+        #expect(find("isso caiu", "isso caiu", "aquilo caiu") == nil)
+        #expect(find("o servidor caiu", "Contabu: o servidor caiu", "Contabo: o servidor caiu") == nil)
+        #expect(find("o servidor caiu", "o servidor caiu", "o servidor caiu de novo") == nil)
+        #expect(find("o servidor caiu", "o servidor caiu", "") == nil)
+    }
+}
+
 @Suite struct StorageTests {
     @Test func wavRoundTrip() {
         let samples: [Float] = [0, 0.5, -0.5, 1, -1]

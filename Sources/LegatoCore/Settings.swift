@@ -25,6 +25,8 @@ public struct Settings: Codable, Equatable {
     public var apiModel: String = "whisper-large-v3-turbo"
     public var vocabulary: [String] = []
     public var replacements: [Replacement] = []
+    /// Suggest a term when the user retypes a misheard word right after dictating it.
+    public var learnFromCorrections: Bool = true
     public var trailingSpace: Bool = true
     public var sounds: Bool = true
     /// Core Audio UID of the microphone to use. Empty follows the system's default input.
@@ -73,6 +75,7 @@ public struct Settings: Codable, Equatable {
         apiModel = value(.apiModel, d.apiModel)
         vocabulary = value(.vocabulary, d.vocabulary)
         replacements = value(.replacements, d.replacements)
+        learnFromCorrections = value(.learnFromCorrections, d.learnFromCorrections)
         trailingSpace = value(.trailingSpace, d.trailingSpace)
         sounds = value(.sounds, d.sounds)
         microphone = value(.microphone, d.microphone)

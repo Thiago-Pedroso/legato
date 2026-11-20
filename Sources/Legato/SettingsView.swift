@@ -412,8 +412,8 @@ private struct VocabularyTab: View {
                 } footer: {
                     Text(
                         L.t(
-                            "Found in your project folders. Only terms the speech model got wrong in a test are listed.",
-                            "Encontradas nas suas pastas de projeto. Só aparecem termos que o modelo de voz errou num teste.")
+                            "From your project folders, or from words you fixed after dictating. Nothing joins the vocabulary until you add it.",
+                            "Vindas das suas pastas de projeto ou de palavras que você corrigiu depois de ditar. Nada entra no vocabulário sem você adicionar.")
                     )
                 }
             }
@@ -465,6 +465,17 @@ private struct VocabularyTab: View {
                 }
             } header: {
                 Text(L.t("Replacements", "Substituições"))
+            }
+            Section {
+                Toggle(
+                    L.t("Learn from my corrections", "Aprender com as minhas correções"),
+                    isOn: $controller.settings.learnFromCorrections)
+            } footer: {
+                Text(
+                    L.t(
+                        "For a minute after each dictation, Legato rereads the text field. If you retype a word into a name or term, it is suggested here. Nothing is stored or sent besides the suggestion.",
+                        "Por um minuto depois de cada ditado, o Legato relê o campo de texto. Se você trocar uma palavra por um nome ou termo, ele aparece aqui como sugestão. Nada é guardado ou enviado além da sugestão.")
+                )
             }
         }
         .formStyle(.grouped)

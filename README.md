@@ -66,6 +66,8 @@ In a test with a synthetic Portuguese voice reading 20 sentences at two speeds, 
 
 **Suggestions from your projects.** Typing a vocabulary by hand is a chore nobody does. If you use Claude Code, run `make claude-command` once and then `/legato-vocabulary ~/Projects/my-project` in any session. It reads the prose in those folders (READMEs, notes, commit messages), picks out the names and jargon, and then tests each one: your Mac speaks the term with a synthetic voice and the speech model transcribes it. Terms the model already gets right are dropped. The rest wait in the Vocabulary tab, each showing how it was misheard, until you accept or dismiss them. Nothing is added on its own. The same steps work from a terminal with `Legato vocab candidates`, `probe` and `suggest`.
 
+**Learning from your fixes.** When Legato gets a name wrong and you retype it, that is the best hint there is. For a minute after each dictation Legato rereads the text field it typed into, and if you turn one of its words into a name or term ("contabu" into "Contabo"), the term shows up among the suggestions. Rewording in ordinary language is ignored. Apps that do not expose their text, which includes many terminals, are skipped. You can turn this off.
+
 **Cleanup.** An optional pass through a chat model that removes filler words and fixes punctuation. It is off by default because it sends the text to the service you pick and adds a short wait. You can keep it to the apps where it pays off, say the terminal where you talk to a coding agent, and leave your messages as you said them.
 
 **History.** Every dictation with its audio. Copy it, listen to it, transcribe it again or delete it. Recordings live in `~/Library/Application Support/Legato`.
@@ -89,11 +91,11 @@ The app binary can transcribe a file from the terminal. Record yourself, then:
 
 ## Privacy
 
-With the local model, audio and text stay on your Mac. Legato has no analytics and makes no network requests besides downloading the model once from Hugging Face. If you turn on an API or the cleanup pass, the audio or text goes to the address you typed, and nowhere else. The vocabulary scan is run by Claude Code, so the terms it reads from your folders go through your Claude account; skip it if those folders are confidential.
+With the local model, audio and text stay on your Mac. Legato has no analytics and makes no network requests besides downloading the model once from Hugging Face. If you turn on an API or the cleanup pass, the audio or text goes to the address you typed, and nowhere else. Learning from your fixes reads the field you dictated into for a minute, on your Mac, and keeps only the suggested term. The vocabulary scan is run by Claude Code, so the terms it reads from your folders go through your Claude account; skip it if those folders are confidential.
 
 ## What is not there yet
 
-Legato is young. Very short utterances are its weak spot: a lone word like "teste" gives the model too little to tell which language it is hearing, and it sometimes answers in the wrong one. When a clip under two seconds comes back unsure and in another language, Legato does not type it; the pill says it didn't catch that, and the History tab keeps what the model wrote. Whisper large-v3 turbo and Canary 1B, both forced to Portuguese, did no better on the same clips, so a second model is not the answer. Full sentences do not have this problem.  The scan tests terms with synthetic voices, which do not pronounce things the way you do. There is no notarized download, so for now you build it from source. Editing selected text by voice, and learning new words from your corrections are on the list.
+Legato is young. Very short utterances are its weak spot: a lone word like "teste" gives the model too little to tell which language it is hearing, and it sometimes answers in the wrong one. When a clip under two seconds comes back unsure and in another language, Legato does not type it; the pill says it didn't catch that, and the History tab keeps what the model wrote. Whisper large-v3 turbo and Canary 1B, both forced to Portuguese, did no better on the same clips, so a second model is not the answer. Full sentences do not have this problem.  The scan tests terms with synthetic voices, which do not pronounce things the way you do. There is no notarized download, so for now you build it from source. Editing selected text by voice is on the list.
 
 ## Development
 
