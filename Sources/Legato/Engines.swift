@@ -152,7 +152,9 @@ actor ParakeetEngine {
         var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
         let result = try await manager.transcribe(audio, decoderState: &state, language: Language(rawValue: language))
         var matches: [TextProcessor.AcousticMatch] = []
+        // The cheap text check first: most dictations hold nothing close to a term.
         if let session = boosting?.session, let timings = result.tokenTimings,
+            session.hasCTCRescoringCandidates(text: result.text, tokenTimings: timings),
             let output = await session.rescore(text: result.text, tokenTimings: timings, audioSamples: audio)
         {
             matches = output.replacements.compactMap { item in
