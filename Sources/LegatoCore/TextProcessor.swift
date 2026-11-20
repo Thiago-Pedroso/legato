@@ -108,7 +108,7 @@ public enum TextProcessor {
         var text: String { leading + core + trailing }
     }
 
-    static func normalize(_ value: String) -> String {
+    public static func normalize(_ value: String) -> String {
         value.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil)
             .filter { $0.isLetter || $0.isNumber }
     }

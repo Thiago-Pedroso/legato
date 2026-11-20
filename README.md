@@ -60,6 +60,8 @@ Your audio is saved to disk before transcription starts. If anything goes wrong,
 
 **Vocabulary.** Names and terms you want spelled your way, like `Claude Code` or the name of your company. When the transcript comes close to one of them, Legato corrects it. There are also literal replacements: say "my email", get your address.
 
+**Suggestions from your projects.** Typing a vocabulary by hand is a chore nobody does. If you use Claude Code, run `make claude-command` once and then `/legato-vocabulary ~/Projects/my-project` in any session. It reads the prose in those folders (READMEs, notes, commit messages), picks out the names and jargon, and then tests each one: your Mac speaks the term with a synthetic voice and the speech model transcribes it. Terms the model already gets right are dropped. The rest wait in the Vocabulary tab, each showing how it was misheard, until you accept or dismiss them. Nothing is added on its own. The same steps work from a terminal with `Legato vocab candidates`, `probe` and `suggest`.
+
 **Cleanup.** An optional pass through a chat model that removes filler words and fixes punctuation. It is off by default because it sends the text to the service you pick and adds a short wait.
 
 **History.** Every dictation with its audio. Copy it, listen to it, transcribe it again or delete it. Recordings live in `~/Library/Application Support/Legato`.
@@ -83,11 +85,11 @@ The app binary can transcribe a file from the terminal. Record yourself, then:
 
 ## Privacy
 
-With the local model, audio and text stay on your Mac. Legato has no analytics and makes no network requests besides downloading the model once from Hugging Face. If you turn on an API or the cleanup pass, the audio or text goes to the address you typed, and nowhere else.
+With the local model, audio and text stay on your Mac. Legato has no analytics and makes no network requests besides downloading the model once from Hugging Face. If you turn on an API or the cleanup pass, the audio or text goes to the address you typed, and nowhere else. The vocabulary scan is run by Claude Code, so the terms it reads from your folders go through your Claude account; skip it if those folders are confidential.
 
 ## What is not there yet
 
-Legato is young. The vocabulary works by correcting the transcript after the fact; it does not yet bias the model itself. There is no notarized download, so for now you build it from source. Rules per app, editing selected text by voice, and learning new words from your corrections are on the list.
+Legato is young. The vocabulary works by correcting the transcript after the fact; it does not yet bias the model itself. The scan tests terms with synthetic voices, which do not pronounce things the way you do. There is no notarized download, so for now you build it from source. Rules per app, editing selected text by voice, and learning new words from your corrections are on the list.
 
 ## Development
 

@@ -301,9 +301,51 @@ private struct VocabularyTab: View {
     @State private var term = ""
     @State private var from = ""
     @State private var to = ""
+    /// Suggestions the user unticked. Everything else is accepted by "Add selected".
+    @State private var skipped: Set<String> = []
+    private let refresh = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
     var body: some View {
         Form {
+            if !controller.suggestions.isEmpty {
+                Section {
+                    ForEach(controller.suggestions) { suggestion in
+                        Toggle(isOn: Binding(
+                            get: { !skipped.contains(suggestion.id) },
+                            set: { on in if on { skipped.remove(suggestion.id) } else { skipped.insert(suggestion.id) } })
+                        ) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(suggestion.term)
+                                Text(detail(suggestion)).font(.callout).foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        .toggleStyle(.checkbox)
+                    }
+                } header: {
+                    // The list can be long; the actions stay at the top where they are always in reach.
+                    HStack {
+                        Text(L.t("Suggestions", "Sugestões") + " (\(controller.suggestions.count))")
+                        Spacer()
+                        Button(L.t("Dismiss All", "Dispensar todas")) {
+                            controller.dismiss(Set(controller.suggestions.map(\.id)))
+                            skipped = []
+                        }
+                        Button(L.t("Add Selected", "Adicionar selecionadas")) {
+                            let chosen = Set(controller.suggestions.map(\.id)).subtracting(skipped)
+                            controller.accept(chosen)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(controller.suggestions.count == skipped.count)
+                    }
+                } footer: {
+                    Text(
+                        L.t(
+                            "Found in your project folders. Only terms the speech model got wrong in a test are listed.",
+                            "Encontradas nas suas pastas de projeto. Só aparecem termos que o modelo de voz errou num teste.")
+                    )
+                }
+            }
             Section {
                 HStack {
                     TextField(L.t("Add a word or name", "Adicionar palavra ou nome"), text: $term, prompt: Text("Claude Code"))
@@ -325,8 +367,8 @@ private struct VocabularyTab: View {
             } footer: {
                 Text(
                     L.t(
-                        "Names and terms Legato should spell your way. When the transcript comes close, it is corrected to match.",
-                        "Nomes e termos que o Legato deve escrever do seu jeito. Quando a transcrição chega perto, ela é corrigida.")
+                        "Names and terms Legato should spell your way. When the transcript comes close, it is corrected to match. To get suggestions from your project folders, run /legato-vocabulary in Claude Code.",
+                        "Nomes e termos que o Legato deve escrever do seu jeito. Quando a transcrição chega perto, ela é corrigida. Para receber sugestões das suas pastas de projeto, rode /legato-vocabulary no Claude Code.")
                 )
             }
             Section {
@@ -355,6 +397,19 @@ private struct VocabularyTab: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear { controller.reloadSuggestions() }
+        .onReceive(refresh) { _ in controller.reloadSuggestions() }
+    }
+
+    private func detail(_ suggestion: Suggestion) -> String {
+        var parts: [String] = []
+        if !suggestion.heard.isEmpty {
+            let forms = suggestion.heard.map { "\u{201C}\($0.text)\u{201D}" }.joined(separator: ", ")
+            parts.append(L.t("Heard as \(forms)", "Ouvido como \(forms)"))
+        }
+        if let note = suggestion.note, !note.isEmpty { parts.append(note) }
+        parts.append(suggestion.source)
+        return parts.joined(separator: "  ·  ")
     }
 
     private func addTerm() {

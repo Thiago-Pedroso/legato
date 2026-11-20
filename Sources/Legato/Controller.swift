@@ -21,6 +21,8 @@ final class Controller: ObservableObject {
     @Published private(set) var entries: [HistoryEntry] = []
     @Published private(set) var modelState: ModelState = .missing
     @Published private(set) var hotkeyActive = false
+    /// Vocabulary found by a folder scan, waiting for the user to accept or dismiss.
+    @Published private(set) var suggestions: [Suggestion] = []
 
     let pill = PillPanel()
     private let history: HistoryStore
@@ -37,16 +39,19 @@ final class Controller: ObservableObject {
     private var lastFailed: UUID?
 
     init() {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Legato", isDirectory: true)
-        history = HistoryStore(directory: support)
-        if let data = UserDefaults.standard.data(forKey: "settings"),
+        history = HistoryStore(directory: AppPaths.support)
+        if let saved = AppPaths.loadSettings() {
+            settings = saved
+        } else if let data = UserDefaults.standard.data(forKey: "settings"),
             let saved = try? JSONDecoder().decode(Settings.self, from: data)
         {
+            // Settings from before they moved to a file the command-line tool can also read.
             settings = saved
+            try? data.write(to: AppPaths.settings, options: .atomic)
         } else {
             settings = Settings()
         }
+        suggestions = SuggestionStore.load(AppPaths.suggestions)
         entries = history.entries
         modelState = settings.localModel.isDownloaded ? .resting : .missing
 
@@ -90,7 +95,7 @@ final class Controller: ObservableObject {
     }
 
     private func settingsChanged(from old: Settings) {
-        if let data = try? JSONEncoder().encode(settings) { UserDefaults.standard.set(data, forKey: "settings") }
+        if let data = try? JSONEncoder().encode(settings) { try? data.write(to: AppPaths.settings, options: .atomic) }
         hotkey.trigger = settings.trigger
         if old.localModel != settings.localModel || old.engine != settings.engine {
             modelState = settings.localModel.isDownloaded ? .resting : .missing
@@ -298,6 +303,31 @@ final class Controller: ObservableObject {
     private func prune() {
         history.prune(keeping: settings.historyLimit)
         entries = history.entries
+    }
+
+    // MARK: Vocabulary suggestions
+
+    /// The scan runs outside the app and leaves its results in a file; pick up what is there.
+    func reloadSuggestions() {
+        let known = Set(settings.vocabulary.map(TextProcessor.normalize))
+        let loaded = SuggestionStore.load(AppPaths.suggestions).filter { !known.contains($0.id) }
+        if loaded != suggestions { suggestions = loaded }
+    }
+
+    func accept(_ ids: Set<String>) {
+        for suggestion in suggestions where ids.contains(suggestion.id) {
+            if !settings.vocabulary.contains(suggestion.term) { settings.vocabulary.append(suggestion.term) }
+            for rule in suggestion.replacements
+            where !settings.replacements.contains(where: { $0.from.lowercased() == rule.from.lowercased() }) {
+                settings.replacements.append(rule)
+            }
+        }
+        dismiss(ids)
+    }
+
+    func dismiss(_ ids: Set<String>) {
+        suggestions.removeAll { ids.contains($0.id) }
+        try? SuggestionStore.save(suggestions, to: AppPaths.suggestions)
     }
 
     // MARK: History

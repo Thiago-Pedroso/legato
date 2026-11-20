@@ -120,3 +120,48 @@ import Testing
         #expect(settings.unloadAfterMinutes == 15)
     }
 }
+
+@Suite struct VocabularyMiningTests {
+    @Test func findsNamesAndJargonInProse() {
+        let text = """
+            # Notas da semana
+            Falei com a Pensy sobre o deploy. O Claude Code abriu um PR no GitHub.
+            Depois a Pensy respondeu. O Claude Code ajudou de novo.
+            Rode `MinhaClasseInterna.run()` e veja https://exemplo.com/CoisaQualquer.
+            """
+        let terms = VocabularyMiner.candidates(in: text).map(\.term)
+        #expect(terms.contains("Pensy"))
+        #expect(terms.contains("Claude Code"))
+        #expect(terms.contains("GitHub"))
+        #expect(terms.contains("PR"))
+        #expect(!terms.contains("Falei"))
+        #expect(!terms.contains("Depois"))
+        #expect(!terms.contains("MinhaClasseInterna"))
+        #expect(!terms.contains("CoisaQualquer"))
+    }
+
+    @Test func probeRecoversTheMisheardTerm() {
+        let heard = "Agora eu vou falar sobre pensi com você."
+        #expect(Probe.middle(of: heard, prefix: "Agora eu vou falar sobre", suffix: "com você") == "pensi")
+        #expect(Probe.middle(of: "Agora vou falar de cloud code", prefix: "Agora eu vou falar sobre", suffix: "com você") == "vou falar de cloud code")
+    }
+
+    @Test func suggestionAddsOnlyReplacementsThatHelp() {
+        let suggestion = Suggestion(
+            term: "Pensy",
+            heard: [
+                HeardForm(text: "pensi", common: false),  // close enough: the correction handles it
+                HeardForm(text: "lambreta", common: true),  // an everyday word: never replace
+                HeardForm(text: "lem bree ai", common: false),
+            ], source: "test")
+        #expect(suggestion.replacements.map(\.from) == ["lem bree ai"])
+    }
+
+    @Test func mergeSkipsKnownTerms() {
+        let existing = [Suggestion(term: "Pensy", source: "a")]
+        let merged = SuggestionStore.merge(
+            existing, with: [Suggestion(term: "pensy", source: "b"), Suggestion(term: "GitHub", source: "b"), Suggestion(term: "Vertyx", source: "b")],
+            vocabulary: ["github"])
+        #expect(merged.map(\.term) == ["Pensy", "Vertyx"])
+    }
+}
