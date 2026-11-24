@@ -15,7 +15,11 @@ In a score, *legato* tells the player to tie the notes together with no gap betw
 
 ## Install
 
-You need a Mac with Apple Silicon, macOS 14 or newer, and the Xcode Command Line Tools (`xcode-select --install`). Xcode itself is not required.
+You need a Mac with Apple Silicon and macOS 14 or newer.
+
+The quickest way is the zip on the [Releases page](https://github.com/Thiago-Pedroso/legato/releases). It is not notarized by Apple yet, so the first time macOS refuses to open it: go to System Settings, Privacy & Security, and click Open Anyway. After each update macOS may ask for the Microphone and Accessibility permissions again.
+
+To build it yourself you need the Xcode Command Line Tools (`xcode-select --install`). Xcode itself is not required.
 
 ```bash
 git clone https://github.com/Thiago-Pedroso/legato.git
@@ -95,7 +99,7 @@ With the local model, audio and text stay on your Mac. Legato has no analytics a
 
 ## What is not there yet
 
-Legato is young. Very short utterances are its weak spot: a lone word like "teste" gives the model too little to tell which language it is hearing, and it sometimes answers in the wrong one. When a clip under two seconds comes back unsure and as a phrase in another language, Legato does not type it; the pill says it didn't catch that, and the History tab keeps what the model wrote. Whisper large-v3 turbo and Canary 1B, both forced to Portuguese, did no better on the same clips, so a second model is not the answer. Full sentences do not have this problem. The scan tests terms with synthetic voices, which do not pronounce things the way you do. There is no notarized download, so for now you build it from source. Editing selected text by voice is on the list.
+Legato is young. Very short utterances are its weak spot: a lone word like "teste" gives the model too little to tell which language it is hearing, and it sometimes answers in the wrong one. When a clip under two seconds comes back unsure and as a phrase in another language, Legato does not type it; the pill says it didn't catch that, and the History tab keeps what the model wrote. Whisper large-v3 turbo and Canary 1B, both forced to Portuguese, did no better on the same clips, so a second model is not the answer. Full sentences do not have this problem. The scan tests terms with synthetic voices, which do not pronounce things the way you do. The download is not notarized yet, which makes the first launch and every update a little clumsier than building from source. Editing selected text by voice is on the list.
 
 ## Development
 

@@ -19,7 +19,7 @@ if [ -n "${NOTARY_KEY:-}" ]; then
   xcrun stapler staple "$APP" >&2
   rm "$ZIP"
 else
-  echo "No notarization credentials: the zip will open only after right-click, Open." >&2
+  echo "No notarization credentials: on other Macs the app opens only after Open Anyway in Privacy & Security." >&2
 fi
 ditto -c -k --keepParent "$APP" "$ZIP"
 echo "$ZIP"

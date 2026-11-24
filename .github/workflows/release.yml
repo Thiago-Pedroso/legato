@@ -53,10 +53,15 @@ jobs:
           if [ -n "$NOTARY_KEY_P8" ] && [[ "${LEGATO_SIGN_IDENTITY:-}" == "Developer ID Application"* ]]; then
             echo "$NOTARY_KEY_P8" | base64 --decode > "$RUNNER_TEMP/notary.p8"
             export NOTARY_KEY="$RUNNER_TEMP/notary.p8"
+            echo "NOTARIZED=true" >> "$GITHUB_ENV"
           fi
           ZIP=$(./scripts/package.sh)
           echo "ZIP=$ZIP" >> "$GITHUB_ENV"
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" "$ZIP" --title "Legato ${GITHUB_REF_NAME#v}" --generate-notes
+        run: |
+          # Without notarization, the notes explain how to open the app; gh puts them above the changelog.
+          NOTES=""
+          [ "${NOTARIZED:-}" = true ] || NOTES=$(cat .github/release-unsigned.md)
+          gh release create "$GITHUB_REF_NAME" "$ZIP" --title "Legato ${GITHUB_REF_NAME#v}" --notes "$NOTES" --generate-notes
