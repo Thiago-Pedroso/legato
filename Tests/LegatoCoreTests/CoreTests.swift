@@ -122,6 +122,17 @@ import Testing
         #expect(TextProcessor.applyAcousticMatches(matches, to: "Abre no GitHub.") { _ in false } == "Abre no GitHub.")
     }
 
+    @Test func acousticMatchesLeaveKnownNamesAlone() {
+        // As the dictionary answers: names only capitalized, "Code" too, since it is English.
+        let words: Set<String> = ["o", "e", "com", "Artur", "Code"]
+        let isWord = { words.contains($0) }
+        let artur = [TextProcessor.AcousticMatch(heard: "o Artur,", term: "OAuth", margin: 5)]
+        let text = "Falei com o Vitor, o Artur, e o Gustavo."
+        #expect(TextProcessor.applyAcousticMatches(artur, to: text, isWord: isWord) == text)
+        let claude = [TextProcessor.AcousticMatch(heard: "Clobe Code", term: "Claude Code", margin: 5)]
+        #expect(TextProcessor.applyAcousticMatches(claude, to: "Abre o Clobe Code.", isWord: isWord) == "Abre o Claude Code.")
+    }
+
     @Test func processTrimsAndAddsSpace() {
         #expect(TextProcessor.process("  oi tudo bem \n", vocabulary: [], replacements: [], trailingSpace: true) == "oi tudo bem ")
         #expect(TextProcessor.process("   ", vocabulary: [], replacements: [], trailingSpace: true) == "")

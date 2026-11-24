@@ -57,9 +57,10 @@ public enum TextProcessor {
     }
 
     /// Puts the matched terms into the text, except where the transcript holds ordinary words
-    /// (`isWord`), a name the model spelled on purpose (a capital inside a word, as in "GitHub"),
-    /// or a weak match. A real word heard clearly is more often right than a name that happens to
-    /// sound close: "pensou" must not become "Pensy", nor "GitHub" become "GitLab".
+    /// (`isWord`), a name the model spelled on purpose (a capital inside a word, as in "GitHub",
+    /// or a name the dictionary knows, as in "Artur"), or a weak match. A real word heard clearly
+    /// is more often right than a term that happens to sound close: "pensou" must not become
+    /// "Pensy", "GitHub" must not become "GitLab", nor "o Artur" become "OAuth".
     public static func applyAcousticMatches(
         _ matches: [AcousticMatch], to text: String, minMargin: Float = 1, isWord: (String) -> Bool
     ) -> String {
@@ -68,12 +69,21 @@ public enum TextProcessor {
         // in the whole text. A repeated mishearing is fixed one occurrence per match, in order.
         for match in matches where match.margin >= minMargin {
             let heard = match.heard.trimmingCharacters(in: .punctuationCharacters.union(.whitespaces))
-            let words = heard.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map { $0.lowercased() }
+            let spelled = heard.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+            let words = spelled.map { $0.lowercased() }
             guard !words.isEmpty, !words.allSatisfy(isWord) else { continue }
-            let deliberateName = heard.split(separator: " ").contains { word in
+            let deliberateName = spelled.contains { word in
                 zip(word, word.dropFirst()).contains { $0.isLowercase && $1.isUppercase }
             }
             guard !deliberateName else { continue }
+            // A known name is a capitalized word the dictionary accepts only capitalized. Words the
+            // term keeps, like "Code" in "Claude Code", are not being replaced and do not count.
+            let kept = Set(match.term.lowercased().split(separator: " ").map(String.init))
+            let knownName = zip(spelled, words).contains { word, lower in
+                !kept.contains(lower) && word.first?.isUppercase == true && word.dropFirst() == lower.dropFirst()
+                    && isWord(word) && !isWord(lower)
+            }
+            guard !knownName else { continue }
             let pattern = "(?<![\\p{L}\\p{N}])" + NSRegularExpression.escapedPattern(for: heard) + "(?![\\p{L}\\p{N}])"
             guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
                 let found = regex.firstMatch(in: result, range: NSRange(result.startIndex..., in: result)),
