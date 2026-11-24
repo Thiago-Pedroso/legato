@@ -76,7 +76,14 @@ actor ParakeetEngine {
         let progress = self.progress
         let task = Task { () -> AsrManager in
             let models = try await AsrModels.downloadAndLoad(version: model.version) { update in
-                progress(update.fractionCompleted)
+                // FluidAudio counts the download as the first half of this operation and compiling
+                // for this Mac as the second. Shown as one bar, the download crept up to 50% and then
+                // looked stuck while the model compiled, so report the download alone and 1 after it.
+                switch update.phase {
+                case .listing: break
+                case .downloading: progress(min(update.fractionCompleted / 0.5, 1))
+                case .compiling: progress(1)
+                }
             }
             let manager = AsrManager(config: .default)
             try await manager.loadModels(models)
