@@ -167,8 +167,11 @@ private struct GeneralTab: View {
             microphone = Permissions.microphone
             accessibility = Permissions.accessibility
             fnAction = Permissions.fnKeyAction
-            let current = AudioDevices.inputs()
-            if current != inputs { inputs = current }
+            // Asking every device about its inputs takes tens of milliseconds; not on the main thread.
+            DispatchQueue.global(qos: .utility).async {
+                let current = AudioDevices.inputs()
+                DispatchQueue.main.async { if current != inputs { inputs = current } }
+            }
         }
     }
 
