@@ -28,10 +28,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: Import the signing certificate
         env:
-          P12: ${{ secrets.DEVELOPER_ID_P12 || secrets.RELEASE_P12 }}
-          P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12 && secrets.DEVELOPER_ID_P12_PASSWORD || secrets.RELEASE_P12_PASSWORD }}
+          DEVELOPER_ID_P12: ${{ secrets.DEVELOPER_ID_P12 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          RELEASE_P12: ${{ secrets.RELEASE_P12 }}
+          RELEASE_P12_PASSWORD: ${{ secrets.RELEASE_P12_PASSWORD }}
         if: env.HAS_SIGNING == 'true'
         run: |
+          if [ -n "$DEVELOPER_ID_P12" ]; then
+            P12="$DEVELOPER_ID_P12" P12_PASSWORD="$DEVELOPER_ID_P12_PASSWORD"
+          else
+            P12="$RELEASE_P12" P12_PASSWORD="$RELEASE_P12_PASSWORD"
+          fi
           KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
           security create-keychain -p ci "$KEYCHAIN"
           security set-keychain-settings "$KEYCHAIN"
@@ -45,6 +52,7 @@ jobs:
           IDENTITY=$(echo "$IDENTITIES" | grep -o '"Developer ID Application[^"]*"' | head -1)
           [ -n "$IDENTITY" ] || IDENTITY=$(echo "$IDENTITIES" | grep -o '"[^"]*"' | head -1)
           IDENTITY=$(echo "$IDENTITY" | tr -d '"')
+          if [ -z "$IDENTITY" ]; then echo "::error::No signing identity in the certificate secret"; exit 1; fi
           echo "LEGATO_SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
       - name: Check the tag matches the app version
         run: |
