@@ -2,6 +2,7 @@ import CoreML
 import FluidAudio
 import Foundation
 import LegatoCore
+import os
 
 enum EngineError: LocalizedError {
     case api(String)
@@ -74,6 +75,12 @@ actor ParakeetEngine {
         if loaded == model, let manager { return manager }
         if let loading, loading.model == model { return try await loading.task.value }
         let progress = self.progress
+        // FluidAudio reports hundreds of times a second; the window only needs whole percents.
+        let shown = OSAllocatedUnfairLock(initialState: -1)
+        let report: @Sendable (Double) -> Void = { fraction in
+            let percent = Int(fraction * 100)
+            if shown.withLock({ last in defer { last = percent }; return last != percent }) { progress(fraction) }
+        }
         let task = Task { () -> AsrManager in
             let models = try await AsrModels.downloadAndLoad(version: model.version) { update in
                 // FluidAudio counts the download as the first half of this operation and compiling
@@ -81,8 +88,8 @@ actor ParakeetEngine {
                 // looked stuck while the model compiled, so report the download alone and 1 after it.
                 switch update.phase {
                 case .listing: break
-                case .downloading: progress(min(update.fractionCompleted / 0.5, 1))
-                case .compiling: progress(1)
+                case .downloading: report(min(update.fractionCompleted / 0.5, 1))
+                case .compiling: report(1)
                 }
             }
             let manager = AsrManager(config: .default)
