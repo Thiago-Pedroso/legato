@@ -225,7 +225,9 @@ final class Controller: ObservableObject {
         case .failed:
             hideTimer?.cancel()
             flashing = false
-            if let id = lastFailed { retry(id, paste: true) } else { refreshPill() }
+            if let id = lastFailed { retry(id, paste: true) }
+            // Shows the retry at work, or clears the pill if there was nothing left to retry.
+            refreshPill()
         default: break
         }
     }
