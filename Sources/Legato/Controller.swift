@@ -214,7 +214,7 @@ final class Controller: ObservableObject {
         case .failed:
             hideTimer?.cancel()
             flashing = false
-            if let id = lastFailed { retry(id, paste: true) }
+            if let id = lastFailed { retry(id, paste: true) } else { refreshPill() }
         default: break
         }
     }
@@ -392,8 +392,7 @@ final class Controller: ObservableObject {
                 endWork()
                 history.update(id) { $0.status = .failed; $0.error = error.localizedDescription }
                 entries = history.entries
-                lastFailed = id
-                flash(.failed(L.t("Failed. Click to retry", "Falhou. Clique para tentar de novo")), seconds: 10)
+                flash(.failed(L.t("Failed. Click to retry", "Falhou. Clique para tentar de novo")), seconds: 10, retry: id)
             }
         }
     }
@@ -496,10 +495,13 @@ final class Controller: ObservableObject {
         pill.show(.working(detail))
     }
 
-    private func flash(_ mode: PillModel.Mode, seconds: Double) {
+    /// `retry` is the dictation a click on the pill runs again; other messages have none, so a
+    /// click on, say, a microphone error never brings back an older failed dictation.
+    private func flash(_ mode: PillModel.Mode, seconds: Double, retry: UUID? = nil) {
         // Never cover a recording in progress: its bars and stop button matter more.
         // A failure is still reachable from the menu and the History tab.
         guard !recorder.isRecording else { return }
+        lastFailed = retry
         hideTimer?.cancel()
         flashing = true
         pill.show(mode)
