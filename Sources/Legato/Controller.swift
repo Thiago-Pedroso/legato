@@ -49,7 +49,6 @@ final class Controller: ObservableObject {
     private var lastFailed: UUID?
     /// The app in front when the recording started, where the text is headed.
     private var targetApp: String?
-    private var recordingSince: TimeInterval = 0
     /// The speakers Legato muted for this recording, to unmute when it ends.
     private var mutedOutput: AudioDeviceID?
 
@@ -71,11 +70,10 @@ final class Controller: ObservableObject {
         modelState = settings.localModel.isDownloaded ? .resting : .missing
 
         recorder.onLevel = { [weak self] level in self?.pill.model.push(level: level) }
-        recorder.onFailure = { [weak self] error in
-            guard let self else { return }
-            machine.reset()
-            restoreOutput()
-            flash(.failed(error.localizedDescription), seconds: 4)
+        recorder.onFailure = { [weak self] _ in
+            // Ends the dictation with whatever was captured; the error comes with it.
+            self?.machine.reset()
+            self?.finishRecording()
         }
         watcher.isWord = { [weak self] word in
             Spelling.isWord(word, in: [Spelling.dictionary(for: self?.settings.language ?? "auto")])
@@ -252,7 +250,6 @@ final class Controller: ObservableObject {
         // A chosen microphone that is not connected right now falls back to the default.
         let device = settings.microphone.isEmpty ? nil : AudioDevices.input(uid: settings.microphone)
         recorder.start(device: device)
-        recordingSince = Self.now
         targetApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         watcher.finish()
         if settings.sounds { Self.play("Tink") }
@@ -269,37 +266,46 @@ final class Controller: ObservableObject {
 
     private func cancelRecording() {
         guard recorder.isRecording else { return }
-        _ = recorder.stop()
+        recorder.stop { _ in }
         restoreOutput()
         refreshPill()
     }
 
     private func finishRecording() {
         guard recorder.isRecording else { return }
-        let samples = recorder.stop()
+        let app = targetApp
+        recorder.stop { [weak self] ending in self?.recorded(ending, app: app) }
         restoreOutput()
         if settings.sounds { Self.play("Pop") }
+    }
+
+    private func recorded(_ ending: Recorder.Ending, app: String?) {
+        let samples = ending.samples
         guard samples.count > WAV.sampleRate / 4 else {
-            // A hold long enough to dictate that brought back no audio at all is a silent
-            // microphone, not a slip of the finger: say so instead of vanishing.
-            if samples.isEmpty, Self.now - recordingSince > 1 {
+            if let error = ending.error {
+                flash(.failed(error.localizedDescription), seconds: 4)
+            } else if ending.silent {
+                // A microphone that was open for a while and sent nothing at all is broken or
+                // muted, not a slip of the finger: say so instead of vanishing.
                 flash(.failed(L.t("The microphone sent no sound", "O microfone não mandou som")), seconds: 4)
             } else {
                 refreshPill()
             }
             return
         }
+        // With an error but audio before it, as when a headset drops mid-dictation, what was
+        // said still goes through.
         let entry: HistoryEntry
         do {
             // Audio goes to disk first. Whatever happens next, the dictation is not lost.
             entry = try history.begin(
-                samples: samples, engine: engineName, error: L.t("Interrupted", "Interrompido"), app: targetApp)
+                samples: samples, engine: engineName, error: L.t("Interrupted", "Interrompido"), app: app)
             entries = history.entries
         } catch {
             flash(.failed(error.localizedDescription), seconds: 4)
             return
         }
-        transcribe(samples, entry: entry.id, paste: true, app: targetApp)
+        transcribe(samples, entry: entry.id, paste: true, app: app)
     }
 
     /// Kept on disk too: if Legato dies mid-recording, the next launch unmutes the speakers.
