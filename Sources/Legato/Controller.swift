@@ -49,6 +49,7 @@ final class Controller: ObservableObject {
     private var lastFailed: UUID?
     /// The app in front when the recording started, where the text is headed.
     private var targetApp: String?
+    private var recordingSince: TimeInterval = 0
     /// The speakers Legato muted for this recording, to unmute when it ends.
     private var mutedOutput: AudioDeviceID?
 
@@ -70,6 +71,12 @@ final class Controller: ObservableObject {
         modelState = settings.localModel.isDownloaded ? .resting : .missing
 
         recorder.onLevel = { [weak self] level in self?.pill.model.push(level: level) }
+        recorder.onFailure = { [weak self] error in
+            guard let self else { return }
+            machine.reset()
+            restoreOutput()
+            flash(.failed(error.localizedDescription), seconds: 4)
+        }
         watcher.isWord = { [weak self] word in
             Spelling.isWord(word, in: [Spelling.dictionary(for: self?.settings.language ?? "auto")])
         }
@@ -96,7 +103,10 @@ final class Controller: ObservableObject {
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.warmUp() }
+            Task { @MainActor in
+                self?.recorder.prepare(fresh: true)
+                self?.warmUp()
+            }
         }
     }
 
@@ -109,6 +119,7 @@ final class Controller: ObservableObject {
     func launch() {
         restoreOutput()
         startHotkey()
+        recorder.prepare()
         // The app is useful the moment it opens only if the model is already in memory.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.warmUp() }
     }
@@ -231,19 +242,16 @@ final class Controller: ObservableObject {
             }
             return
         }
-        do {
-            pill.model.resetLevels()
-            // A chosen microphone that is not connected right now falls back to the default.
-            let device = settings.microphone.isEmpty ? nil : AudioDevices.input(uid: settings.microphone)
-            try recorder.start(device: device)
-            targetApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        } catch {
-            machine.reset()
-            flash(.failed(error.localizedDescription), seconds: 4)
-            return
-        }
         hideTimer?.cancel()
         flashing = false
+        pill.model.resetLevels()
+        // The pill first: the microphone takes a moment to open, and the press should show at once.
+        pill.show(.recording(handsFree: false))
+        // A chosen microphone that is not connected right now falls back to the default.
+        let device = settings.microphone.isEmpty ? nil : AudioDevices.input(uid: settings.microphone)
+        recorder.start(device: device)
+        recordingSince = Self.now
+        targetApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         watcher.finish()
         if settings.sounds { Self.play("Tink") }
         if settings.muteWhileRecording {
@@ -253,7 +261,6 @@ final class Controller: ObservableObject {
                 self.muteOutput()
             }
         }
-        pill.show(.recording(handsFree: false))
         // Start loading while the user is still talking, so the wait overlaps the speech.
         if modelState == .resting { loadModel() }
     }
@@ -271,7 +278,13 @@ final class Controller: ObservableObject {
         restoreOutput()
         if settings.sounds { Self.play("Pop") }
         guard samples.count > WAV.sampleRate / 4 else {
-            refreshPill()
+            // A hold long enough to dictate that brought back no audio at all is a silent
+            // microphone, not a slip of the finger: say so instead of vanishing.
+            if samples.isEmpty, Self.now - recordingSince > 1 {
+                flash(.failed(L.t("The microphone sent no sound", "O microfone não mandou som")), seconds: 4)
+            } else {
+                refreshPill()
+            }
             return
         }
         let entry: HistoryEntry
