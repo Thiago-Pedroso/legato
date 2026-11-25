@@ -131,9 +131,15 @@ private struct GeneralTab: View {
                 }
                 StepRow(
                     done: accessibility, title: L.t("Accessibility", "Acessibilidade"),
-                    detail: L.t(
-                        "To notice the shortcut and type the text for you.",
-                        "Para perceber o atalho e digitar o texto por você."),
+                    // After an update of a build without a stable signature, macOS keeps showing
+                    // the old grant switched on while it no longer applies.
+                    detail: accessibility
+                        ? L.t(
+                            "To notice the shortcut and type the text for you.",
+                            "Para perceber o atalho e digitar o texto por você.")
+                        : L.t(
+                            "To notice the shortcut and type the text for you. If Legato is already listed and switched on, remove it with the − button and add it again.",
+                            "Para perceber o atalho e digitar o texto por você. Se o Legato já aparece ligado na lista, remova-o com o botão − e adicione de novo."),
                     button: L.t("Open Settings", "Abrir Ajustes")
                 ) {
                     Permissions.requestAccessibility()
