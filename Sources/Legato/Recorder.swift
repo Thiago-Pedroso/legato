@@ -26,7 +26,7 @@ final class Recorder {
                 unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &device,
                 UInt32(MemoryLayout<AudioDeviceID>.size))
         }
-        let format = input.outputFormat(forBus: 0)
+        let format = input.inputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else {
             throw NSError(
                 domain: "Legato", code: 1,
