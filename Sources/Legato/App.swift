@@ -21,6 +21,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.launch()
         // First run, or a permission went missing: open the window that explains what to do.
         if !controller.settings.onboarded || !Permissions.accessibility || Permissions.microphone != .authorized {
+            // On the very first run the model downloads while the user goes through the permissions.
+            if !controller.settings.onboarded { controller.loadModel() }
             controller.settings.onboarded = true
             openSettings()
         }
