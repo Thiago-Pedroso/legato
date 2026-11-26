@@ -40,6 +40,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         menu.addItem(disabled(statusLine))
+        if let update = controller.update {
+            menu.addItem(item(L.t("Download Legato \(update.version)…", "Baixar o Legato \(update.version)…")) {
+                NSWorkspace.shared.open(update.page)
+            })
+        }
         menu.addItem(.separator())
 
         let recent = controller.entries.filter { $0.status == .done }.prefix(8)

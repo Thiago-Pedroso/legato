@@ -41,6 +41,9 @@ final class Controller: ObservableObject {
     @Published private(set) var hotkeyActive = false
     /// Vocabulary found by a folder scan, waiting for the user to accept or dismiss.
     @Published private(set) var suggestions: [Suggestion] = []
+    /// A newer release on GitHub, when there is one.
+    @Published private(set) var update: UpdateCheck.Available?
+    private var updateTimer: Timer?
 
     let pill = PillPanel()
     private let history: HistoryStore
@@ -134,6 +137,22 @@ final class Controller: ObservableObject {
         recorder.prepare()
         // The app is useful the moment it opens only if the model is already in memory.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.warmUp() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in self?.checkForUpdates() }
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 24 * 60 * 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.checkForUpdates() }
+        }
+    }
+
+    /// Legato does not update itself; it says when there is something newer to download.
+    func checkForUpdates() {
+        guard settings.checkForUpdates else {
+            update = nil
+            return
+        }
+        Task {
+            // Offline or rate-limited: keep what an earlier check found.
+            if let found = await UpdateCheck.newer(), settings.checkForUpdates { update = found }
+        }
     }
 
     /// The key tap needs Accessibility; keep trying until the user grants it.
@@ -156,6 +175,7 @@ final class Controller: ObservableObject {
         }
         if old.historyLimit != settings.historyLimit { prune() }
         if old.unloadAfterMinutes != settings.unloadAfterMinutes, modelState == .ready { scheduleUnload() }
+        if old.checkForUpdates != settings.checkForUpdates { checkForUpdates() }
     }
 
     // MARK: Model lifecycle

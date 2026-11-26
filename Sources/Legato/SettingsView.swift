@@ -63,6 +63,10 @@ struct SettingsView: View {
                 .accessibilityAddTraits(tab == index ? .isSelected : [])
             }
             Spacer()
+            if let update = controller.update {
+                Link(L.t("Version \(update.version) is out", "Saiu a versão \(update.version)"), destination: update.page)
+                    .font(.caption).padding(.leading, 9)
+            }
             Text("v" + (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"))
                 .font(.caption).foregroundStyle(.tertiary).padding(.leading, 9)
         }
@@ -126,6 +130,7 @@ private struct GeneralTab: View {
                 Toggle(L.t("Add a space after each dictation", "Adicionar um espaço depois de cada ditado"), isOn: $controller.settings.trailingSpace)
                 Toggle(L.t("Open Legato at login", "Abrir o Legato ao iniciar a sessão"), isOn: $loginItem)
                     .onChange(of: loginItem) { _, value in LoginItem.set(value) }
+                Toggle(L.t("Tell me when a new version is out", "Avisar quando sair uma versão nova"), isOn: $controller.settings.checkForUpdates)
             }
             Section(L.t("Permissions", "Permissões")) {
                 StepRow(

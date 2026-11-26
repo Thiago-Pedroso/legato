@@ -365,3 +365,13 @@ import Testing
     }
 }
 
+@Suite struct ReleaseTests {
+    @Test func comparesDottedVersions() {
+        #expect(Release.isNewer("v0.4.0", than: "0.3.0"))
+        #expect(Release.isNewer("v0.3.1", than: "0.3"))
+        #expect(Release.isNewer("v1.0.0", than: "0.10.2"))
+        #expect(!Release.isNewer("v0.3.0", than: "0.3.0"))
+        #expect(!Release.isNewer("v0.2.9", than: "0.3.0"))
+        #expect(!Release.isNewer("v0.4.0-beta", than: "0.3.0"))
+    }
+}
