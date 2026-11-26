@@ -249,6 +249,8 @@ import Testing
         #expect(settings.trigger == .rightOption)
         #expect(settings.vocabulary == ["Pensy"])
         #expect(settings.unloadAfterMinutes == 15)
+        #expect(settings.avoidBluetoothMicrophone)
+        #expect(settings.checkForUpdates)
     }
 }
 
@@ -305,3 +307,61 @@ import Testing
         #expect(!terms.contains("Claude Code"))
     }
 }
+
+@Suite struct SpeechEdgeTests {
+    @Test func speechStandsWellAboveTheRoom() {
+        let room: [Float] = Array(repeating: -58, count: 40) + Array(repeating: -20, count: 60)
+        let threshold = SpeechEdge.threshold(levels: room)
+        #expect(threshold == -46)
+        #expect(-20 > threshold)
+        #expect(-57 < threshold)
+    }
+
+    @Test func aQuietRoomStillNeedsMinusFiftyToCountAsSpeech() {
+        #expect(SpeechEdge.threshold(levels: Array(repeating: -80, count: 50)) == -50)
+    }
+
+    @Test func zerosFromAMicrophoneWakingUpAreNotTheRoom() {
+        let levels: [Float] = Array(repeating: -100, count: 30) + [-62, -60, -58, -30, -28, -26, -27, -29, -31, -30]
+        #expect(SpeechEdge.threshold(levels: levels) == -48)
+        #expect(SpeechEdge.threshold(levels: []) == 0)
+    }
+
+    @Test func aShortDictationIsJudgedByHowTheSpeakerSounds() {
+        // Levels from a real three-second dictation in a noisy room: nearly all of it is speech.
+        let levels: [Float] = [-41, -37, -33, -32, -30, -29, -28, -31, -32, -28, -40, -28, -29, -29, -30, -31, -30]
+        let threshold = SpeechEdge.threshold(levels: levels)
+        #expect(threshold == -40)
+        #expect(-30 > threshold)
+    }
+}
+
+@Suite struct DiagnosticsTests {
+    @Test func keepsTheNewestLinesOnly() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("diagnostics-\(UUID()).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        for index in 0..<(DiagnosticsLog.limit + 5) {
+            var timing = DictationTiming()
+            timing.audio = Double(index)
+            DiagnosticsLog.append(timing, to: url)
+        }
+        let loaded = DiagnosticsLog.load(url)
+        #expect(loaded.count == DiagnosticsLog.limit)
+        #expect(loaded.first?.audio == 5)
+        #expect(loaded.last?.audio == Double(DiagnosticsLog.limit + 4))
+    }
+
+    @Test func reportMarksAHeadsetInItsCallProfile() {
+        var timing = DictationTiming()
+        timing.microphone = "AirPods Pro"
+        timing.microphoneRate = 24_000
+        timing.bluetoothOutputRate = 24_000
+        timing.soundDelay = 0.8
+        timing.outcome = "pasted"
+        let report = DiagnosticsLog.report([timing], version: "0.4.0")
+        #expect(report.contains("AirPods Pro"))
+        #expect(report.contains("HFP"))
+        #expect(report.contains("800"))
+    }
+}
+

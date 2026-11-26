@@ -107,6 +107,16 @@ private struct GeneralTab: View {
                         Text(L.t("Not connected", "Desconectado")).tag(controller.settings.microphone)
                     }
                 }
+                if controller.settings.microphone.isEmpty {
+                    Toggle(isOn: $controller.settings.avoidBluetoothMicrophone) {
+                        Text(L.t("Use the Mac's microphone instead of a Bluetooth headset's", "Usar o microfone do Mac no lugar do fone Bluetooth"))
+                        Text(
+                            L.t(
+                                "A headset's microphone switches it to call mode: music drops to phone quality and the first words can be lost. With the lid closed, the headset is used.",
+                                "O microfone do fone o coloca em modo de chamada: a música cai para qualidade de telefone e as primeiras palavras podem se perder. Com a tampa fechada, o fone é usado.")
+                        )
+                    }
+                }
                 Toggle(
                     L.t("Mute the speakers while recording", "Silenciar o som do Mac enquanto grava"),
                     isOn: $controller.settings.muteWhileRecording)
@@ -583,6 +593,11 @@ private struct HistoryTab: View {
                 }
                 .frame(width: 220)
                 Spacer()
+                Button(L.t("Copy Diagnostics", "Copiar diagnóstico")) { Inserter.copy(controller.diagnosticsReport()) }
+                    .help(
+                        L.t(
+                            "Timings of recent dictations, without what was said, to paste into a bug report.",
+                            "Os tempos dos últimos ditados, sem o que foi dito, para colar num relato de problema."))
                 Button(L.t("Show in Finder", "Mostrar no Finder")) { NSWorkspace.shared.open(controller.recordingsFolder) }
                 Button(L.t("Clear", "Limpar"), role: .destructive) { controller.clearHistory() }
                     .disabled(controller.entries.isEmpty)

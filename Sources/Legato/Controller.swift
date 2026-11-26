@@ -13,6 +13,18 @@ enum ModelState: Equatable {
     /// Downloaded but not in memory.
     case resting
     case failed(String)
+
+    /// For the diagnostics log.
+    var label: String {
+        switch self {
+        case .missing: return "missing"
+        case .downloading: return "download"
+        case .loading: return "loading"
+        case .ready: return "ready"
+        case .resting: return "resting"
+        case .failed: return "failed"
+        }
+    }
 }
 
 enum DictationError: Error {
@@ -51,6 +63,8 @@ final class Controller: ObservableObject {
     private var targetApp: String?
     /// The speakers Legato muted for this recording, to unmute when it ends.
     private var mutedOutput: AudioDeviceID?
+    /// Where the model stood when the key went down: "resting" means this dictation loaded it.
+    private var modelAtPress = ""
 
     init() {
         history = HistoryStore(directory: AppPaths.support)
@@ -247,9 +261,15 @@ final class Controller: ObservableObject {
         pill.model.resetLevels()
         // The pill first: the microphone takes a moment to open, and the press should show at once.
         pill.show(.recording(handsFree: false))
-        // A chosen microphone that is not connected right now falls back to the default.
-        let device = settings.microphone.isEmpty ? nil : AudioDevices.input(uid: settings.microphone)
-        recorder.start(device: device)
+        let (chosen, avoidBluetooth) = (settings.microphone, settings.avoidBluetoothMicrophone)
+        recorder.start {
+            // A chosen microphone that is not connected right now falls back to the default.
+            if !chosen.isEmpty { return AudioDevices.input(uid: chosen) }
+            guard avoidBluetooth, let current = AudioDevices.defaultInput, AudioDevices.isBluetooth(current)
+            else { return nil }
+            return AudioDevices.builtInInput
+        }
+        modelAtPress = settings.engine == .local ? modelState.label : "api"
         targetApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         watcher.finish()
         if settings.sounds { Self.play("Tink") }
@@ -266,7 +286,7 @@ final class Controller: ObservableObject {
 
     private func cancelRecording() {
         guard recorder.isRecording else { return }
-        recorder.stop { _ in }
+        recorder.stop(tail: false) { _ in }
         restoreOutput()
         refreshPill()
     }
@@ -274,23 +294,43 @@ final class Controller: ObservableObject {
     private func finishRecording() {
         guard recorder.isRecording else { return }
         let app = targetApp
-        recorder.stop { [weak self] ending in self?.recorded(ending, app: app) }
-        restoreOutput()
-        if settings.sounds { Self.play("Pop") }
+        let released = Date()
+        recorder.stop { [weak self] ending in
+            guard let self else { return }
+            // Only now that the last word is in: the speakers or the stop sound would be recorded.
+            self.restoreOutput()
+            if self.settings.sounds { Self.play("Pop") }
+            self.recorded(ending, app: app, released: released)
+        }
     }
 
-    private func recorded(_ ending: Recorder.Ending, app: String?) {
+    private func recorded(_ ending: Recorder.Ending, app: String?, released: Date) {
         let samples = ending.samples
+        var timing = DictationTiming()
+        timing.microphone = ending.stats.device
+        timing.microphoneRate = ending.stats.rate
+        timing.soundDelay = ending.stats.soundDelay
+        timing.tail = ending.stats.tail
+        timing.reopenings = ending.stats.reopenings
+        timing.audio = Double(samples.count) / Double(WAV.sampleRate)
+        timing.model = modelAtPress
+        if let output = AudioDevices.defaultOutput, AudioDevices.isBluetooth(output) {
+            timing.bluetoothOutputRate = AudioDevices.sampleRate(of: output)
+        }
         guard samples.count > WAV.sampleRate / 4 else {
             if let error = ending.error {
                 flash(.failed(error.localizedDescription), seconds: 4)
+                timing.outcome = "microphone error"
             } else if ending.silent {
                 // A microphone that was open for a while and sent nothing at all is broken or
                 // muted, not a slip of the finger: say so instead of vanishing.
                 flash(.failed(L.t("The microphone sent no sound", "O microfone não mandou som")), seconds: 4)
+                timing.outcome = "no sound"
             } else {
                 refreshPill()
+                timing.outcome = "too short"
             }
+            Self.log(timing, released: released)
             return
         }
         // With an error but audio before it, as when a headset drops mid-dictation, what was
@@ -303,9 +343,23 @@ final class Controller: ObservableObject {
             entries = history.entries
         } catch {
             flash(.failed(error.localizedDescription), seconds: 4)
+            timing.outcome = "not saved"
+            Self.log(timing, released: released)
             return
         }
-        transcribe(samples, entry: entry.id, paste: true, app: app)
+        transcribe(samples, entry: entry.id, paste: true, app: app, timing: (timing, released))
+    }
+
+    /// One line in the diagnostics log, written off the main thread.
+    nonisolated private static func log(_ timing: DictationTiming, released: Date) {
+        var timing = timing
+        timing.total = Date().timeIntervalSince(released)
+        DispatchQueue.global(qos: .utility).async { DiagnosticsLog.append(timing, to: AppPaths.diagnostics) }
+    }
+
+    func diagnosticsReport() -> String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        return DiagnosticsLog.report(DiagnosticsLog.load(AppPaths.diagnostics), version: version)
     }
 
     /// Kept on disk too: if Legato dies mid-recording, the next launch unmutes the speakers.
@@ -339,20 +393,32 @@ final class Controller: ObservableObject {
         transcribe(samples, entry: id, paste: paste, app: app, verify: false)
     }
 
-    private func transcribe(_ samples: [Float], entry id: UUID, paste: Bool, app: String?, verify: Bool = true) {
+    /// `timing` comes with a fresh dictation, never with a retry, and goes to the diagnostics log.
+    private func transcribe(
+        _ samples: [Float], entry id: UUID, paste: Bool, app: String?, verify: Bool = true,
+        timing: (DictationTiming, released: Date)? = nil
+    ) {
         guard !inFlight.contains(id) else { return }
         inFlight.insert(id)
         beginWork()
         let settings = self.settings
         Task {
             defer { inFlight.remove(id) }
+            var record = timing?.0
+            func finish(_ outcome: String) {
+                guard var record, let released = timing?.released else { return }
+                record.outcome = outcome
+                Self.log(record, released: released)
+            }
             do {
                 var text: String
+                let started = Date()
                 switch settings.engine {
                 case .local:
                     if modelState == .resting || modelState == .missing { loadModel() }
                     let transcript = try await engine.transcribe(
                         samples, model: settings.localModel, language: settings.language)
+                    record?.transcription = Date().timeIntervalSince(started)
                     text = transcript.corrected(language: settings.language)
                     let seconds = Double(samples.count) / Double(WAV.sampleRate)
                     if verify,
@@ -370,8 +436,11 @@ final class Controller: ObservableObject {
                     text = try await APIEngine.transcribe(
                         samples, baseURL: settings.apiBaseURL, model: settings.apiModel, key: Keychain.get("api"),
                         language: settings.language, vocabulary: settings.vocabulary)
+                    record?.transcription = Date().timeIntervalSince(started)
                 }
                 if settings.cleansUp(in: app), !text.isEmpty {
+                    let cleaning = Date()
+                    defer { record?.cleanup = Date().timeIntervalSince(cleaning) }
                     // Cleanup is a nicety: if it fails or stalls, the plain transcript goes through.
                     switch settings.cleanupEngine {
                     case .onDevice:
@@ -390,6 +459,7 @@ final class Controller: ObservableObject {
                     history.remove(id)
                     entries = history.entries
                     flash(.notice(L.t("Didn't catch that", "Não entendi")), seconds: 1.6)
+                    finish("empty")
                     return
                 }
                 history.update(id) { $0.text = final; $0.status = .done; $0.error = nil; $0.engine = self.engineName }
@@ -397,9 +467,11 @@ final class Controller: ObservableObject {
                 if paste, Inserter.insert(final) {
                     if settings.learnFromCorrections { watcher.watch(pasted: final) }
                     refreshPill()
+                    finish("pasted")
                 } else {
                     Inserter.copy(final)
                     flash(.notice(L.t("Copied", "Copiado")), seconds: 1.6)
+                    finish("copied")
                 }
             } catch DictationError.unclear(let heard) {
                 endWork()
@@ -409,11 +481,13 @@ final class Controller: ObservableObject {
                 }
                 entries = history.entries
                 flash(.notice(L.t("Didn't catch that", "Não entendi")), seconds: 1.6)
+                finish("other language")
             } catch {
                 endWork()
                 history.update(id) { $0.status = .failed; $0.error = error.localizedDescription }
                 entries = history.entries
                 flash(.failed(L.t("Failed. Click to retry", "Falhou. Clique para tentar de novo")), seconds: 10, retry: id)
+                finish("failed")
             }
         }
     }
