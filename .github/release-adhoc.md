@@ -1,0 +1,1 @@
+> This build has no stable signature either, so after each update macOS asks again for the Microphone and Accessibility permissions. Building from source with `make signing` avoids that, as the README explains.

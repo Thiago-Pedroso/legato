@@ -70,6 +70,11 @@ final class Controller: ObservableObject {
         modelState = settings.localModel.isDownloaded ? .resting : .missing
 
         recorder.onLevel = { [weak self] level in self?.pill.model.push(level: level) }
+        recorder.onFailure = { [weak self] _ in
+            // Ends the dictation with whatever was captured; the error comes with it.
+            self?.machine.reset()
+            self?.finishRecording()
+        }
         watcher.isWord = { [weak self] word in
             Spelling.isWord(word, in: [Spelling.dictionary(for: self?.settings.language ?? "auto")])
         }
@@ -96,7 +101,10 @@ final class Controller: ObservableObject {
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.warmUp() }
+            Task { @MainActor in
+                self?.recorder.prepare(fresh: true)
+                self?.warmUp()
+            }
         }
     }
 
@@ -109,6 +117,7 @@ final class Controller: ObservableObject {
     func launch() {
         restoreOutput()
         startHotkey()
+        recorder.prepare()
         // The app is useful the moment it opens only if the model is already in memory.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.warmUp() }
     }
@@ -215,6 +224,8 @@ final class Controller: ObservableObject {
             hideTimer?.cancel()
             flashing = false
             if let id = lastFailed { retry(id, paste: true) }
+            // Shows the retry at work, or clears the pill if there was nothing left to retry.
+            refreshPill()
         default: break
         }
     }
@@ -231,19 +242,15 @@ final class Controller: ObservableObject {
             }
             return
         }
-        do {
-            pill.model.resetLevels()
-            // A chosen microphone that is not connected right now falls back to the default.
-            let device = settings.microphone.isEmpty ? nil : AudioDevices.input(uid: settings.microphone)
-            try recorder.start(device: device)
-            targetApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        } catch {
-            machine.reset()
-            flash(.failed(error.localizedDescription), seconds: 4)
-            return
-        }
         hideTimer?.cancel()
         flashing = false
+        pill.model.resetLevels()
+        // The pill first: the microphone takes a moment to open, and the press should show at once.
+        pill.show(.recording(handsFree: false))
+        // A chosen microphone that is not connected right now falls back to the default.
+        let device = settings.microphone.isEmpty ? nil : AudioDevices.input(uid: settings.microphone)
+        recorder.start(device: device)
+        targetApp = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         watcher.finish()
         if settings.sounds { Self.play("Tink") }
         if settings.muteWhileRecording {
@@ -253,38 +260,52 @@ final class Controller: ObservableObject {
                 self.muteOutput()
             }
         }
-        pill.show(.recording(handsFree: false))
         // Start loading while the user is still talking, so the wait overlaps the speech.
         if modelState == .resting { loadModel() }
     }
 
     private func cancelRecording() {
         guard recorder.isRecording else { return }
-        _ = recorder.stop()
+        recorder.stop { _ in }
         restoreOutput()
         refreshPill()
     }
 
     private func finishRecording() {
         guard recorder.isRecording else { return }
-        let samples = recorder.stop()
+        let app = targetApp
+        recorder.stop { [weak self] ending in self?.recorded(ending, app: app) }
         restoreOutput()
         if settings.sounds { Self.play("Pop") }
+    }
+
+    private func recorded(_ ending: Recorder.Ending, app: String?) {
+        let samples = ending.samples
         guard samples.count > WAV.sampleRate / 4 else {
-            refreshPill()
+            if let error = ending.error {
+                flash(.failed(error.localizedDescription), seconds: 4)
+            } else if ending.silent {
+                // A microphone that was open for a while and sent nothing at all is broken or
+                // muted, not a slip of the finger: say so instead of vanishing.
+                flash(.failed(L.t("The microphone sent no sound", "O microfone não mandou som")), seconds: 4)
+            } else {
+                refreshPill()
+            }
             return
         }
+        // With an error but audio before it, as when a headset drops mid-dictation, what was
+        // said still goes through.
         let entry: HistoryEntry
         do {
             // Audio goes to disk first. Whatever happens next, the dictation is not lost.
             entry = try history.begin(
-                samples: samples, engine: engineName, error: L.t("Interrupted", "Interrompido"), app: targetApp)
+                samples: samples, engine: engineName, error: L.t("Interrupted", "Interrompido"), app: app)
             entries = history.entries
         } catch {
             flash(.failed(error.localizedDescription), seconds: 4)
             return
         }
-        transcribe(samples, entry: entry.id, paste: true, app: targetApp)
+        transcribe(samples, entry: entry.id, paste: true, app: app)
     }
 
     /// Kept on disk too: if Legato dies mid-recording, the next launch unmutes the speakers.
@@ -392,8 +413,7 @@ final class Controller: ObservableObject {
                 endWork()
                 history.update(id) { $0.status = .failed; $0.error = error.localizedDescription }
                 entries = history.entries
-                lastFailed = id
-                flash(.failed(L.t("Failed. Click to retry", "Falhou. Clique para tentar de novo")), seconds: 10)
+                flash(.failed(L.t("Failed. Click to retry", "Falhou. Clique para tentar de novo")), seconds: 10, retry: id)
             }
         }
     }
@@ -496,10 +516,13 @@ final class Controller: ObservableObject {
         pill.show(.working(detail))
     }
 
-    private func flash(_ mode: PillModel.Mode, seconds: Double) {
+    /// `retry` is the dictation a click on the pill runs again; other messages have none, so a
+    /// click on, say, a microphone error never brings back an older failed dictation.
+    private func flash(_ mode: PillModel.Mode, seconds: Double, retry: UUID? = nil) {
         // Never cover a recording in progress: its bars and stop button matter more.
         // A failure is still reachable from the menu and the History tab.
         guard !recorder.isRecording else { return }
+        lastFailed = retry
         hideTimer?.cancel()
         flashing = true
         pill.show(mode)
