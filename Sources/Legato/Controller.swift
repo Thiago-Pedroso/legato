@@ -181,7 +181,13 @@ final class Controller: ObservableObject {
         restoreOutput()
         // A microphone that hangs every time is not helped by relaunching over and over.
         let last = UserDefaults.standard.double(forKey: Self.relaunchedAtKey)
-        guard Date().timeIntervalSince1970 - last > 120 else {
+        let relaunch = Date().timeIntervalSince1970 - last > 120
+        // Written before exit, not on the background queue other lines use.
+        var timing = DictationTiming()
+        timing.model = modelState.label
+        timing.outcome = relaunch ? "microphone hung, relaunched" : "microphone hung"
+        DiagnosticsLog.append(timing, to: AppPaths.diagnostics)
+        guard relaunch else {
             pill.show(.failed(L.t("The microphone stopped responding. Restart Legato", "O microfone travou. Reinicie o Legato")))
             return
         }
