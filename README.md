@@ -84,7 +84,7 @@ In a test with a synthetic Portuguese voice reading 20 sentences at two speeds, 
 
 On an M5 MacBook, eight seconds of speech are transcribed in about 0.06 seconds once the model is in memory. Loading it from disk takes around 0.3 seconds.
 
-Keeping that true is most of the engineering. People let go of the key on their last syllable, so when you are still mid-word Legato keeps listening until the sound drops, a few tenths of a second at most; when you stop talking before letting go, it does not wait at all. Legato loads the model in the background right after it opens. After 15 minutes without dictating (you can change this) the model leaves memory. When you next press the key the microphone opens at once and the model loads while you are still talking, so the wait overlaps your speech instead of following it.
+Keeping that true is most of the engineering. People let go of the key on their last syllable, so when you are still mid-word Legato keeps listening until the sound drops, half a second at most, even when you let go in the short pause before your last word; when you stop talking before letting go, it waits a tenth of a second at most. In a room where other people are talking, their voices can keep it listening for that half second. Legato loads the model in the background right after it opens. After 15 minutes without dictating (you can change this) the model leaves memory. When you next press the key the microphone opens at once and the model loads while you are still talking, so the wait overlaps your speech instead of following it.
 
 Parakeet handles 25 European languages. It was tested here mostly with Brazilian Portuguese full of English technical terms ("abre um pull request no GitHub"), which it gets right.
 

@@ -334,6 +334,13 @@ import Testing
         #expect(threshold == -40)
         #expect(-30 > threshold)
     }
+
+    @Test func aPauseBetweenWordsIsNotTheEnd() {
+        // "…no parque": the key came up in the gap before the "p".
+        #expect(SpeechEdge.speaking([-28, -27, -45], above: -40))
+        #expect(!SpeechEdge.speaking([-28, -45, -46], above: -40))
+        #expect(!SpeechEdge.speaking([], above: -40))
+    }
 }
 
 @Suite struct DiagnosticsTests {
