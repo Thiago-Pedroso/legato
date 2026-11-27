@@ -6,12 +6,14 @@ import Foundation
 /// there loses the end of the last word, so it runs on while the sound stays at speech level.
 /// A recording that already ends in silence stops at once and costs no time.
 public enum SpeechEdge {
-    /// The longest Legato keeps listening after the key is released.
-    public static let longestTail = 0.6
-    /// Whether the latest buffer, about a tenth of a second, held speech. Finer steps mistake the
-    /// pause between two words for the end.
+    /// The longest Legato keeps listening after the key is released. Replaying releases up to
+    /// 0.4 s early over recorded dictations, half a second never cut a word and 0.4 s did.
+    public static let longestTail = 0.5
+    /// Whether either of the latest two buffers, about a tenth of a second each, held speech.
+    /// A single buffer can fall in the pause between two words, and a key released there lost
+    /// the last word.
     public static func speaking(_ levels: [Float], above threshold: Float) -> Bool {
-        levels.last.map { $0 > threshold } ?? false
+        levels.suffix(2).contains { $0 > threshold }
     }
 
     /// The level above which a stretch of audio counts as speech, from the loudness of each
