@@ -212,6 +212,7 @@ public enum AppPaths {
     }
     public static var settings: URL { support.appendingPathComponent("settings.json") }
     public static var suggestions: URL { support.appendingPathComponent("suggestions.json") }
+    public static var diagnostics: URL { support.appendingPathComponent("diagnostics.jsonl") }
 
     public static func loadSettings() -> Settings? {
         guard let data = try? Data(contentsOf: settings) else { return nil }

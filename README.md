@@ -17,7 +17,9 @@ In a score, *legato* tells the player to tie the notes together with no gap betw
 
 You need a Mac with Apple Silicon and macOS 14 or newer.
 
-The quickest way is the zip on the [Releases page](https://github.com/Thiago-Pedroso/legato/releases). It is not notarized by Apple yet, so the first time macOS refuses to open it: go to System Settings, Privacy & Security, and click Open Anyway. Releases are signed with the same certificate every time, so the Microphone and Accessibility permissions carry over to the next version; only coming from 0.2.2 or older does macOS ask for them once more.
+The quickest way is the zip on the [Releases page](https://github.com/Thiago-Pedroso/legato/releases). It is not notarized by Apple, so the first time macOS refuses to open it: go to System Settings, Privacy & Security, and click Open Anyway. Releases are signed with the same certificate every time, so the Microphone and Accessibility permissions carry over to the next version; only coming from 0.2.2 or older does macOS ask for them once more. If Accessibility then shows Legato switched on but the key does nothing, click Renew in Legato's checklist: it clears the stale grant so you can switch it on again.
+
+Legato does not update itself. Once a day it asks GitHub whether a newer release is out, and if so the menu offers to download it.
 
 To build it yourself you need the Xcode Command Line Tools (`xcode-select --install`). Xcode itself is not required.
 
@@ -39,7 +41,9 @@ Legato opens its settings window with a short checklist:
 
 1. **Microphone**, to hear you.
 2. **Accessibility**, to notice the dictation key and to type the text into other apps.
-3. **Speech model**, a 630 MB download that happens once. The first load also takes a minute or two while macOS prepares the model for your Mac. After that it loads in a fraction of a second.
+3. **Speech model**, a 630 MB download that starts on its own the first time Legato opens, while you grant the permissions, and picks up where it stopped if the connection drops. The first load also takes a minute or two while macOS prepares the model for your Mac. After that it loads in a fraction of a second.
+
+At the bottom of the window there is a field to try a dictation right there.
 
 If you use `fn` as the dictation key, macOS may also react to it by opening the emoji picker or switching keyboards. Legato tells you when that is the case. The fix is in System Settings, Keyboard: set "Press 🌐 key to" to "Do Nothing".
 
@@ -60,7 +64,7 @@ Your audio is saved to disk before transcription starts. If anything goes wrong,
 
 **Dictation key.** `fn`, or the right Option, Command or Control key if your keyboard has no `fn`.
 
-**Microphone.** The system default, or a specific one, so AirPods connecting in the middle of a call do not change where Legato listens. Legato can also mute the Mac's speakers while it records, so the song playing does not end up in your dictation; it unmutes them when you finish, and leaves alone speakers you had muted yourself.
+**Microphone.** The system default, or a specific one, so AirPods connecting in the middle of a call do not change where Legato listens. When the default is a Bluetooth headset, Legato records from the Mac's own microphone instead: a headset's microphone switches it to its call profile, which drops your music to phone quality and loses the first moments of speech while it switches. With the lid closed it uses the headset, and you can turn this off. Legato can also mute the Mac's speakers while it records, so the song playing does not end up in your dictation; it unmutes them when you finish, and leaves alone speakers you had muted yourself.
 
 **Where transcription runs.** On this Mac, with Parakeet Ultra (the default) or the smaller Parakeet v3. Or through any service that speaks the OpenAI transcription API, such as Groq, OpenAI or a server of your own. With an API your audio is sent to that service; the key is stored in your keychain.
 
@@ -74,13 +78,13 @@ In a test with a synthetic Portuguese voice reading 20 sentences at two speeds, 
 
 **Cleanup.** An optional pass through a language model that removes filler words and fixes punctuation. It runs on Apple's on-device model when Apple Intelligence is on (macOS 26), so the text stays on your Mac, or through a chat API of your choice. It is off by default because it adds a short wait, and if the model is slow or unavailable the plain transcript goes through. You can keep it to the apps where it pays off, say the terminal where you talk to a coding agent, and leave your messages as you said them.
 
-**History.** Every dictation with its audio. Copy it, listen to it, transcribe it again or delete it. Recordings live in `~/Library/Application Support/Legato`.
+**History.** Every dictation with its audio. Copy it, listen to it, transcribe it again or delete it. Recordings live in `~/Library/Application Support/Legato`. If Legato feels slow or misses words only some of the time, Copy Diagnostics puts the timings of the last dictations on the clipboard (which microphone, how long it took to send sound, whether the model had to load), without anything you said, ready to paste into an issue.
 
 ## How fast is it
 
 On an M5 MacBook, eight seconds of speech are transcribed in about 0.06 seconds once the model is in memory. Loading it from disk takes around 0.3 seconds.
 
-Keeping that true is most of the engineering. Legato loads the model in the background right after it opens. After 15 minutes without dictating (you can change this) the model leaves memory. When you next press the key the microphone opens at once and the model loads while you are still talking, so the wait overlaps your speech instead of following it.
+Keeping that true is most of the engineering. People let go of the key on their last syllable, so when you are still mid-word Legato keeps listening until the sound drops, a few tenths of a second at most; when you stop talking before letting go, it does not wait at all. Legato loads the model in the background right after it opens. After 15 minutes without dictating (you can change this) the model leaves memory. When you next press the key the microphone opens at once and the model loads while you are still talking, so the wait overlaps your speech instead of following it.
 
 Parakeet handles 25 European languages. It was tested here mostly with Brazilian Portuguese full of English technical terms ("abre um pull request no GitHub"), which it gets right.
 
@@ -95,11 +99,11 @@ The app binary can transcribe a file from the terminal. Record yourself, then:
 
 ## Privacy
 
-With the local model, audio and text stay on your Mac. Legato has no analytics and makes no network requests besides downloading the model once from Hugging Face. If you turn on an API or the cleanup pass, the audio or text goes to the address you typed, and nowhere else. Learning from your fixes reads the field you dictated into for a minute, on your Mac, and keeps only the suggested term. The vocabulary scan is run by Claude Code, so the terms it reads from your folders go through your Claude account; skip it if those folders are confidential.
+With the local model, audio and text stay on your Mac. Legato has no analytics and makes no network requests besides downloading the model once from Hugging Face and asking GitHub once a day for the latest version number, which carries nothing about you and can be turned off in General. If you turn on an API or the cleanup pass, the audio or text goes to the address you typed, and nowhere else. Learning from your fixes reads the field you dictated into for a minute, on your Mac, and keeps only the suggested term. The vocabulary scan is run by Claude Code, so the terms it reads from your folders go through your Claude account; skip it if those folders are confidential.
 
 ## What is not there yet
 
-Legato is young. Very short utterances are its weak spot: a lone word like "teste" gives the model too little to tell which language it is hearing, and it sometimes answers in the wrong one. When a clip under two seconds comes back unsure and as a phrase in another language, Legato does not type it; the pill says it didn't catch that, and the History tab keeps what the model wrote. Whisper large-v3 turbo and Canary 1B, both forced to Portuguese, did no better on the same clips, so a second model is not the answer. Full sentences do not have this problem. The scan tests terms with synthetic voices, which do not pronounce things the way you do. The download is not notarized yet, which makes the first launch a little clumsier than building from source. Editing selected text by voice is on the list.
+Legato is young. Very short utterances are its weak spot: a lone word like "teste" gives the model too little to tell which language it is hearing, and it sometimes answers in the wrong one. When a clip under two seconds comes back unsure and as a phrase in another language, Legato does not type it; the pill says it didn't catch that, and the History tab keeps what the model wrote. Whisper large-v3 turbo and Canary 1B, both forced to Portuguese, did no better on the same clips, so a second model is not the answer. Full sentences do not have this problem. The scan tests terms with synthetic voices, which do not pronounce things the way you do. The download is not notarized, which makes the first launch a little clumsier than building from source, and updates are downloaded by hand. Editing selected text by voice is on the list.
 
 ## Development
 

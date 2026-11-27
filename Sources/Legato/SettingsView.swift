@@ -63,6 +63,10 @@ struct SettingsView: View {
                 .accessibilityAddTraits(tab == index ? .isSelected : [])
             }
             Spacer()
+            if let update = controller.update {
+                Link(L.t("Version \(update.version) is out", "Saiu a versão \(update.version)"), destination: update.page)
+                    .font(.caption).padding(.leading, 9)
+            }
             Text("v" + (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.1.0"))
                 .font(.caption).foregroundStyle(.tertiary).padding(.leading, 9)
         }
@@ -82,6 +86,7 @@ private struct GeneralTab: View {
     @State private var fnAction = Permissions.fnKeyAction
     @State private var loginItem = LoginItem.isEnabled
     @State private var inputs = AudioDevices.inputs()
+    @State private var practice = ""
     private let refresh = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -107,6 +112,16 @@ private struct GeneralTab: View {
                         Text(L.t("Not connected", "Desconectado")).tag(controller.settings.microphone)
                     }
                 }
+                if controller.settings.microphone.isEmpty {
+                    Toggle(isOn: $controller.settings.avoidBluetoothMicrophone) {
+                        Text(L.t("Use the Mac's microphone instead of a Bluetooth headset's", "Usar o microfone do Mac no lugar do fone Bluetooth"))
+                        Text(
+                            L.t(
+                                "A headset's microphone switches it to call mode: music drops to phone quality and the first words can be lost. With the lid closed, the headset is used.",
+                                "O microfone do fone o coloca em modo de chamada: a música cai para qualidade de telefone e as primeiras palavras podem se perder. Com a tampa fechada, o fone é usado.")
+                        )
+                    }
+                }
                 Toggle(
                     L.t("Mute the speakers while recording", "Silenciar o som do Mac enquanto grava"),
                     isOn: $controller.settings.muteWhileRecording)
@@ -116,6 +131,7 @@ private struct GeneralTab: View {
                 Toggle(L.t("Add a space after each dictation", "Adicionar um espaço depois de cada ditado"), isOn: $controller.settings.trailingSpace)
                 Toggle(L.t("Open Legato at login", "Abrir o Legato ao iniciar a sessão"), isOn: $loginItem)
                     .onChange(of: loginItem) { _, value in LoginItem.set(value) }
+                Toggle(L.t("Tell me when a new version is out", "Avisar quando sair uma versão nova"), isOn: $controller.settings.checkForUpdates)
             }
             Section(L.t("Permissions", "Permissões")) {
                 StepRow(
@@ -131,16 +147,17 @@ private struct GeneralTab: View {
                 }
                 StepRow(
                     done: accessibility, title: L.t("Accessibility", "Acessibilidade"),
-                    // After an update of a build without a stable signature, macOS keeps showing
-                    // the old grant switched on while it no longer applies.
+                    // After an update signed differently, macOS keeps showing the old grant
+                    // switched on while it no longer applies.
                     detail: accessibility
                         ? L.t(
                             "To notice the shortcut and type the text for you.",
                             "Para perceber o atalho e digitar o texto por você.")
                         : L.t(
-                            "To notice the shortcut and type the text for you. If Legato is already listed and switched on, remove it with the − button and add it again.",
-                            "Para perceber o atalho e digitar o texto por você. Se o Legato já aparece ligado na lista, remova-o com o botão − e adicione de novo."),
-                    button: L.t("Open Settings", "Abrir Ajustes")
+                            "To notice the shortcut and type the text for you. If Legato is already listed and switched on, click Renew: it clears the old grant so you can switch it on again.",
+                            "Para perceber o atalho e digitar o texto por você. Se o Legato já aparece ligado na lista, clique em Refazer: ele apaga a permissão antiga para você ligar de novo."),
+                    button: L.t("Open Settings", "Abrir Ajustes"),
+                    secondary: (L.t("Renew", "Refazer"), Permissions.renewAccessibility)
                 ) {
                     Permissions.requestAccessibility()
                     Permissions.open(Permissions.accessibilityPane)
@@ -160,6 +177,15 @@ private struct GeneralTab: View {
                         button: L.t("Open Keyboard", "Abrir Teclado")
                     ) { Permissions.open(Permissions.keyboardPane) }
                 }
+            }
+            Section(L.t("Try it", "Experimente")) {
+                let key = controller.settings.trigger.title
+                TextField(
+                    L.t("Try it", "Experimente"), text: $practice,
+                    prompt: Text(L.t("Click here, hold \(key), say something and let go", "Clique aqui, segure \(key), fale algo e solte")),
+                    axis: .vertical
+                )
+                .lineLimit(2...4).labelsHidden()
             }
         }
         .formStyle(.grouped)
@@ -205,6 +231,8 @@ private struct StepRow: View {
     var button: String
     /// 0...1 shows a progress bar, a negative value a spinner.
     var busy: Double? = nil
+    /// A second way out, offered while the step is not done.
+    var secondary: (title: String, action: () -> Void)? = nil
     var action: () -> Void
 
     var body: some View {
@@ -222,6 +250,7 @@ private struct StepRow: View {
             if let busy, busy < 0 {
                 ProgressView().controlSize(.small)
             } else if !done, busy == nil {
+                if let secondary { Button(secondary.title, action: secondary.action) }
                 Button(button, action: action)
             }
         }
@@ -583,6 +612,11 @@ private struct HistoryTab: View {
                 }
                 .frame(width: 220)
                 Spacer()
+                Button(L.t("Copy Diagnostics", "Copiar diagnóstico")) { Inserter.copy(controller.diagnosticsReport()) }
+                    .help(
+                        L.t(
+                            "Timings of recent dictations, without what was said, to paste into a bug report.",
+                            "Os tempos dos últimos ditados, sem o que foi dito, para colar num relato de problema."))
                 Button(L.t("Show in Finder", "Mostrar no Finder")) { NSWorkspace.shared.open(controller.recordingsFolder) }
                 Button(L.t("Clear", "Limpar"), role: .destructive) { controller.clearHistory() }
                     .disabled(controller.entries.isEmpty)

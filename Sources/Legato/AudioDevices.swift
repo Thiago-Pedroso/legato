@@ -1,5 +1,6 @@
 import CoreAudio
 import Foundation
+import IOKit
 
 struct InputDevice: Identifiable, Hashable {
     let id: AudioDeviceID
@@ -41,6 +42,48 @@ enum AudioDevices {
 
     static func input(uid: String) -> AudioDeviceID? {
         inputs().first { $0.uid == uid }?.id
+    }
+
+    static func name(of device: AudioDeviceID) -> String? {
+        string(device, kAudioObjectPropertyName)
+    }
+
+    static func sampleRate(of device: AudioDeviceID) -> Double? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate, mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var rate: Float64 = 0
+        var size = UInt32(MemoryLayout<Float64>.size)
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &rate) == noErr else { return nil }
+        return rate
+    }
+
+    static func isBluetooth(_ device: AudioDeviceID) -> Bool {
+        let kind = transport(of: device)
+        return kind == kAudioDeviceTransportTypeBluetooth || kind == kAudioDeviceTransportTypeBluetoothLE
+    }
+
+    /// The Mac's own microphone, unless the lid is closed: then it hears nothing.
+    static var builtInInput: AudioDeviceID? {
+        guard !lidClosed else { return nil }
+        return inputs().first { transport(of: $0.id) == kAudioDeviceTransportTypeBuiltIn }?.id
+    }
+
+    private static var lidClosed: Bool {
+        let root = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPMrootDomain"))
+        defer { IOObjectRelease(root) }
+        let state = IORegistryEntryCreateCFProperty(root, "AppleClamshellState" as CFString, kCFAllocatorDefault, 0)
+        return (state?.takeRetainedValue() as? Bool) ?? false
+    }
+
+    private static func transport(of device: AudioDeviceID) -> UInt32 {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyTransportType, mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain)
+        var kind: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        AudioObjectGetPropertyData(device, &address, 0, nil, &size, &kind)
+        return kind
     }
 
     static var defaultOutput: AudioDeviceID? { systemDevice(kAudioHardwarePropertyDefaultOutputDevice) }

@@ -39,6 +39,19 @@ enum Permissions {
         _ = AXIsProcessTrustedWithOptions(options)
     }
 
+    /// After an update signed differently, the list in System Settings can show Legato switched
+    /// on while the grant belongs to the old build. Forgetting it lets macOS ask afresh.
+    static func renewAccessibility() {
+        guard let id = Bundle.main.bundleIdentifier else { return }
+        let reset = Process()
+        reset.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        reset.arguments = ["reset", "Accessibility", id]
+        try? reset.run()
+        reset.waitUntilExit()
+        requestAccessibility()
+        open(accessibilityPane)
+    }
+
     /// What macOS does when fn is pressed alone: 0 nothing, 1 input source, 2 emoji, 3 dictation.
     /// A Mac where the setting was never touched has no value stored and opens the emoji picker.
     static var fnKeyAction: Int {

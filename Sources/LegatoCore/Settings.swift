@@ -40,6 +40,12 @@ public struct Settings: Codable, Equatable {
     public var sounds: Bool = true
     /// Core Audio UID of the microphone to use. Empty follows the system's default input.
     public var microphone: String = ""
+    /// With the system default as the microphone and a Bluetooth headset as that default, record
+    /// from the Mac's own microphone instead. A headset's microphone switches it to its call
+    /// profile: the music drops to phone quality and the first moments of speech are lost.
+    public var avoidBluetoothMicrophone: Bool = true
+    /// Look on GitHub once a day for a newer release, and say so in the menu.
+    public var checkForUpdates: Bool = true
     /// Silences the speakers while recording, so music or a video does not end up in the dictation.
     public var muteWhileRecording: Bool = false
     /// Minutes without dictating before the local model leaves memory. 0 keeps it loaded.
@@ -89,6 +95,8 @@ public struct Settings: Codable, Equatable {
         trailingSpace = value(.trailingSpace, d.trailingSpace)
         sounds = value(.sounds, d.sounds)
         microphone = value(.microphone, d.microphone)
+        avoidBluetoothMicrophone = value(.avoidBluetoothMicrophone, d.avoidBluetoothMicrophone)
+        checkForUpdates = value(.checkForUpdates, d.checkForUpdates)
         muteWhileRecording = value(.muteWhileRecording, d.muteWhileRecording)
         unloadAfterMinutes = value(.unloadAfterMinutes, d.unloadAfterMinutes)
         historyLimit = value(.historyLimit, d.historyLimit)

@@ -17,6 +17,18 @@ final class Recorder {
         var error: Error?
         /// The microphone was open for over a second and sent nothing.
         var silent = false
+        var stats = Stats()
+    }
+
+    /// How the microphone behaved, for the diagnostics log.
+    struct Stats {
+        var device: String?
+        var rate: Double = 0
+        /// Seconds from `start` to the first sample that was not silence. Nil if none came.
+        var soundDelay: Double?
+        /// Seconds recorded after the key came up, while the speaker was finishing a word.
+        var tail: Double = 0
+        var reopenings = 0
     }
 
     /// Loudness from 0 to 1, delivered on the main thread while recording.
@@ -39,10 +51,15 @@ final class Recorder {
     private var openGeneration = 0
     private var failure: Error?
     private var openedAt: CFAbsoluteTime?
+    private var startedAt: CFAbsoluteTime = 0
+    private var device: String?
     // Shared with the audio thread, under `lock`.
     private let lock = NSLock()
     private var captured: [Float] = []
     private var rate: Double = 0
+    /// Loudness of each buffer, about a tenth of a second, in dBFS, to tell speech from the room.
+    private var levels: [Float] = []
+    private var firstSoundAt: CFAbsoluteTime?
     /// Which tap is current. A buffer from a tap being removed must not land in the next one.
     private var tap = 0
     /// Audio from before the microphone changed format, already at 16 kHz.
@@ -61,17 +78,24 @@ final class Recorder {
         }
     }
 
-    /// Starts recording from `device`, or from the system's default input when it is nil.
+    /// Starts recording from the device `choose` names, or from the system's default input when
+    /// it names none. `choose` runs off the main thread: asking Core Audio about devices is slow.
     /// Returns at once; if the microphone cannot be opened, `onFailure` says so.
-    func start(device: AudioDeviceID? = nil) {
+    func start(device choose: @escaping () -> AudioDeviceID? = { nil }) {
         isRecording = true
         generation += 1
         let generation = self.generation
+        let pressed = CFAbsoluteTimeGetCurrent()
         onQueue { [self] in
             lock.withLock {
                 captured = []
                 earlier = []
+                levels = []
+                firstSoundAt = nil
             }
+            startedAt = pressed
+            self.device = nil
+            let device = choose()
             reopenings = 0
             openGeneration = generation
             failure = nil
@@ -94,27 +118,56 @@ final class Recorder {
 
     /// Stops, and hands what was captured, resampled for the speech engines, to `done` on the
     /// main thread. Waiting for a microphone that is still opening happens off the main thread.
-    func stop(_ done: @escaping (Ending) -> Void) {
+    /// With `tail`, a speaker still mid-word when the key came up is heard to the end of it.
+    func stop(tail: Bool = true, _ done: @escaping (Ending) -> Void) {
         guard isRecording else { return done(Ending(samples: [])) }
         isRecording = false
         generation += 1
         onQueue { [self] in
+            let tailed = tail ? finishWord() : 0
             close()
-            let (segment, rate, earlier) = lock.withLock { () -> ([Float], Double, [Float]) in
+            let (segment, rate, earlier, firstSound) = lock.withLock { () -> ([Float], Double, [Float], CFAbsoluteTime?) in
                 defer {
                     captured = []
                     self.earlier = []
+                    levels = []
                 }
-                return (captured, self.rate, self.earlier)
+                return (captured, self.rate, self.earlier, firstSoundAt)
             }
             var ending = Ending(samples: earlier + Self.resample(segment, from: rate), error: failure)
             ending.silent = ending.samples.isEmpty && failure == nil
                 && openedAt.map { CFAbsoluteTimeGetCurrent() - $0 > 1 } == true
+            ending.stats = Stats(
+                device: device, rate: rate, soundDelay: firstSound.map { $0 - startedAt }, tail: tailed,
+                reopenings: reopenings)
             failure = nil
             openedAt = nil
             DispatchQueue.main.async { done(ending) }
         }
         prepare()
+    }
+
+    /// Keeps recording while the sound stays at speech level, up to `SpeechEdge.longestTail`.
+    /// Returns how long it waited. A recording that ends in silence does not wait at all.
+    private func finishWord() -> Double {
+        guard engine != nil else { return 0 }
+        let start = CFAbsoluteTimeGetCurrent()
+        let (initial, count, speaking) = lock.withLock { () -> (Float, Int, Bool) in
+            let threshold = SpeechEdge.threshold(levels: levels)
+            return (threshold, levels.count, SpeechEdge.speaking(levels, above: threshold))
+        }
+        guard speaking else { return 0 }
+        var (threshold, seen) = (initial, count)
+        while CFAbsoluteTimeGetCurrent() - start < SpeechEdge.longestTail {
+            usleep(10_000)
+            let (count, still) = lock.withLock { (levels.count, SpeechEdge.speaking(levels, above: threshold)) }
+            guard count > seen else { continue }
+            seen = count
+            if !still { break }
+            // A rising floor, as when the room gets louder, must not keep the recording open.
+            threshold = max(threshold, lock.withLock { SpeechEdge.threshold(levels: levels) })
+        }
+        return CFAbsoluteTimeGetCurrent() - start
     }
 
     /// How long the queue has been on one piece of work. Core Audio can hang inside
@@ -190,6 +243,9 @@ final class Recorder {
         self.observer = observer
         wanted = device
         if openedAt == nil { openedAt = CFAbsoluteTimeGetCurrent() }
+        // Following the default, the engine records through an aggregate of its own; name the
+        // microphone behind it instead.
+        self.device = (device ?? AudioDevices.defaultInput).flatMap(AudioDevices.name(of:))
     }
 
     private func reopen() {
@@ -256,15 +312,18 @@ final class Recorder {
         guard let channel = buffer.floatChannelData?[0] else { return }
         let count = Int(buffer.frameLength)
         let samples = UnsafeBufferPointer(start: channel, count: count)
-        let current = lock.withLock { () -> Bool in
-            guard tap == self.tap else { return false }
-            captured.append(contentsOf: samples)
-            return true
-        }
-        guard current else { return }
         var sum: Float = 0
         for sample in samples { sum += sample * sample }
         let decibels = 10 * log10(max(sum / Float(max(count, 1)), 1e-10))
+        let current = lock.withLock { () -> Bool in
+            guard tap == self.tap else { return false }
+            captured.append(contentsOf: samples)
+            levels.append(decibels)
+            // A microphone waking up, as a Bluetooth headset does, sends pure zeros at first.
+            if firstSoundAt == nil, sum > 0 { firstSoundAt = CFAbsoluteTimeGetCurrent() }
+            return true
+        }
+        guard current else { return }
         // Report the loudest moment of each ~60 ms, a pace the eye can follow.
         peak = max(peak, CGFloat(max(0, min(1, (decibels + 52) / 40))))
         pending += count
