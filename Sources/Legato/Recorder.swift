@@ -64,6 +64,8 @@ final class Recorder {
     private var tap = 0
     /// Audio from before the microphone changed format, already at 16 kHz.
     private var earlier: [Float] = []
+    /// When the work running on `queue` began, nil while it is idle.
+    private var busySince: CFAbsoluteTime?
     // Audio thread only.
     private var peak: CGFloat = 0
     private var pending = 0
@@ -71,7 +73,7 @@ final class Recorder {
     /// Builds the engine for the next recording in the background. `fresh` replaces one built
     /// earlier, for when the audio hardware may have changed under it, as after sleep.
     func prepare(fresh: Bool = false) {
-        queue.async { [self] in
+        onQueue { [self] in
             if fresh || spare == nil { spare = (Self.makeEngine(), AudioDevices.defaultInput) }
         }
     }
@@ -84,7 +86,7 @@ final class Recorder {
         generation += 1
         let generation = self.generation
         let pressed = CFAbsoluteTimeGetCurrent()
-        queue.async { [self] in
+        onQueue { [self] in
             lock.withLock {
                 captured = []
                 earlier = []
@@ -121,7 +123,7 @@ final class Recorder {
         guard isRecording else { return done(Ending(samples: [])) }
         isRecording = false
         generation += 1
-        queue.async { [self] in
+        onQueue { [self] in
             let tailed = tail ? finishWord() : 0
             close()
             let (segment, rate, earlier, firstSound) = lock.withLock { () -> ([Float], Double, [Float], CFAbsoluteTime?) in
@@ -168,6 +170,21 @@ final class Recorder {
         return CFAbsoluteTimeGetCurrent() - start
     }
 
+    /// How long the queue has been on one piece of work. Core Audio can hang inside
+    /// `AVAudioEngine` while it builds the microphone, spinning without end; every recording
+    /// after that waits behind it. Any thread may ask.
+    var busyFor: TimeInterval {
+        lock.withLock { busySince.map { CFAbsoluteTimeGetCurrent() - $0 } ?? 0 }
+    }
+
+    private func onQueue(_ work: @escaping () -> Void) {
+        queue.async { [self] in
+            lock.withLock { busySince = CFAbsoluteTimeGetCurrent() }
+            work()
+            lock.withLock { busySince = nil }
+        }
+    }
+
     // MARK: On the queue
 
     private static func makeEngine() -> AVAudioEngine {
@@ -185,7 +202,7 @@ final class Recorder {
         let observer = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
         ) { [weak self] _ in
-            self?.queue.async { self?.reopen() }
+            self?.onQueue { self?.reopen() }
         }
         do {
             // Without a choice the engine follows the system default by itself; naming that device

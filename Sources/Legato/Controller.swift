@@ -141,6 +141,9 @@ final class Controller: ObservableObject {
         updateTimer = Timer.scheduledTimer(withTimeInterval: 24 * 60 * 60, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.checkForUpdates() }
         }
+        watchdog = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.checkRecorder() }
+        }
     }
 
     /// Legato does not update itself; it says when there is something newer to download.
@@ -153,6 +156,42 @@ final class Controller: ObservableObject {
             // Offline or rate-limited: keep what an earlier check found.
             if let found = await UpdateCheck.newer(), settings.checkForUpdates { update = found }
         }
+    }
+
+    // MARK: Hung microphone
+
+    /// Longer than opening any microphone takes, a Bluetooth headset waking up included.
+    private static let hungAfter: TimeInterval = 8
+    private static let relaunchedAtKey = "relaunchedAt"
+    private var watchdog: Timer?
+    private var hangReported = false
+
+    /// Core Audio sometimes never returns while `AVAudioEngine` builds the microphone, and
+    /// recordings then show flat bars forever. The stuck thread cannot be stopped; only a
+    /// fresh process gets the microphone back.
+    private func checkRecorder() {
+        guard recorder.busyFor > Self.hungAfter else {
+            hangReported = false
+            return
+        }
+        // A transcription in progress finishes first; a relaunch would interrupt it.
+        guard working == 0, !hangReported else { return }
+        hangReported = true
+        machine.reset()
+        restoreOutput()
+        // A microphone that hangs every time is not helped by relaunching over and over.
+        let last = UserDefaults.standard.double(forKey: Self.relaunchedAtKey)
+        guard Date().timeIntervalSince1970 - last > 120 else {
+            pill.show(.failed(L.t("The microphone stopped responding. Restart Legato", "O microfone travou. Reinicie o Legato")))
+            return
+        }
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.relaunchedAtKey)
+        UserDefaults.standard.synchronize()
+        let open = Process()
+        open.executableURL = URL(fileURLWithPath: "/bin/sh")
+        open.arguments = ["-c", "sleep 1; /usr/bin/open \"$0\"", Bundle.main.bundlePath]
+        guard (try? open.run()) != nil else { return }
+        exit(0)
     }
 
     /// The key tap needs Accessibility; keep trying until the user grants it.
